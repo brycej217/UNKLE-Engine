@@ -1,0 +1,107 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="renderer.cpp">
+      <Filter>renderer\src</Filter>
+    </ClCompile>
+    <ClCompile Include="allocator.cpp">
+      <Filter>renderer\src</Filter>
+    </ClCompile>
+    <ClCompile Include="rasterizer.cpp">
+      <Filter>renderer\src</Filter>
+    </ClCompile>
+    <ClCompile Include="pipeline.cpp">
+      <Filter>renderer\src</Filter>
+    </ClCompile>
+    <ClCompile Include="controller.cpp">
+      <Filter>engine\src</Filter>
+    </ClCompile>
+    <ClCompile Include="engine.cpp">
+      <Filter>engine\src</Filter>
+    </ClCompile>
+    <ClCompile Include="input.cpp">
+      <Filter>engine\src</Filter>
+    </ClCompile>
+    <ClCompile Include="main.cpp">
+      <Filter>engine\src</Filter>
+    </ClCompile>
+    <ClCompile Include="scene.cpp">
+      <Filter>engine\src</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="renderer.h">
+      <Filter>renderer\include</Filter>
+    </ClInclude>
+    <ClInclude Include="allocator.h">
+      <Filter>renderer\include</Filter>
+    </ClInclude>
+    <ClInclude Include="structs.h">
+      <Filter>renderer\include</Filter>
+    </ClInclude>
+    <ClInclude Include="pipeline.h">
+      <Filter>renderer\include</Filter>
+    </ClInclude>
+    <ClInclude Include="rasterizer.h">
+      <Filter>renderer\include</Filter>
+    </ClInclude>
+    <ClInclude Include="controller.h">
+      <Filter>engine\include</Filter>
+    </ClInclude>
+    <ClInclude Include="engine.h">
+      <Filter>engine\include</Filter>
+    </ClInclude>
+    <ClInclude Include="input.h">
+      <Filter>engine\include</Filter>
+    </ClInclude>
+    <ClInclude Include="scene.h">
+      <Filter>engine\include</Filter>
+    </ClInclude>
+    <ClInclude Include="utils.h">
+      <Filter>engine\include</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="shaders">
+      <UniqueIdentifier>{500fe891-ef12-45bf-aa6e-690d257e92d2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="textures">
+      <UniqueIdentifier>{023e2eba-b782-4e4d-9795-4650ca4a9488}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="engine">
+      <UniqueIdentifier>{20cce306-84fd-46a1-9fd6-ee674e0f762a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="engine\include">
+      <UniqueIdentifier>{544e376f-07c8-41c2-9a1d-bb151474a09c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="engine\src">
+      <UniqueIdentifier>{c4f2bb48-9c59-4cab-9783-73b4e7c4a9f2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="renderer">
+      <UniqueIdentifier>{4d9bd546-8bd9-4dbc-97cf-f216fe4b5832}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="renderer\include">
+      <UniqueIdentifier>{a41de23a-3119-4bb5-bb6b-1b182093a8df}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="renderer\src">
+      <UniqueIdentifier>{5279fb65-1825-4208-acee-3131eef1d128}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="shaders\compile.bat">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\frag.spv">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\shader.frag">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\shader.vert">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\vert.spv">
+      <Filter>shaders</Filter>
+    </None>
+  </ItemGroup>
+</Project>
