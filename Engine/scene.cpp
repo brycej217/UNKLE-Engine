@@ -74,6 +74,7 @@ void SceneManager::loadScene(const char* path)
 		Mesh mesh;
 
 		mesh.vertexOffset = static_cast<uint32_t>(verticesSSBO.size()); // first vertex corrseponding to this mesh
+		mesh.vertexCount = static_cast<uint32_t>(currMesh->mNumVertices);
 
 		// find vertices
 		for (unsigned int j = 0; j < currMesh->mNumVertices; j++)
@@ -103,8 +104,7 @@ void SceneManager::loadScene(const char* path)
 		
 		mesh.indexCount = indexCount;
 
-		renderer->meshes.push_back(mesh);
-		cout << "found " << verticesSSBO.size() << " vertices" << endl;
+		renderer->pipelineFeed.meshes.push_back(mesh);
 	}
 	renderer->createVertexBuffer(verticesSSBO, indicesSSBO, renderer->pipelineFeed.vertexSSBO, renderer->pipelineFeed.indexSSBO);
 
@@ -132,8 +132,6 @@ void SceneManager::loadScene(const char* path)
 			.color = vec3(L->mColorDiffuse.r, L->mColorDiffuse.g, L->mColorDiffuse.b) / 1000.0f,
 		};
 
-		cout << to_string(light.color) << endl;
-
 		renderer->pipelineFeed.lights.push_back(light);
 	}
 }
@@ -150,7 +148,7 @@ void SceneManager::visit(const aiNode* node, const mat4& parentTransform, const 
 		// determine which of the scene's meshes this mesh refers to
 		unsigned meshIndex = node->mMeshes[i];
 		const aiMesh* currMesh = scene->mMeshes[meshIndex];
-		Mesh* mesh = &renderer->meshes[meshIndex];
+		Mesh* mesh = &renderer->pipelineFeed.meshes[meshIndex];
 
 		// record current index of transform buffers and create transform buffer
 		uint32_t transformIndex = static_cast<uint32_t>(renderer->pipelineFeed.transforms.size());
@@ -169,7 +167,9 @@ void SceneManager::visit(const aiNode* node, const mat4& parentTransform, const 
 		Instance instance
 		{
 			.transformIndex = transformIndex,
-			.textureIndex = textureIndex
+			.textureIndex = textureIndex,
+			.baseIndex = mesh->firstIndex,
+			.baseVertex = static_cast<uint32_t>(mesh->vertexOffset),
 		};
 
 		// create instance entry for mesh
@@ -207,7 +207,6 @@ uint32_t SceneManager::getTextureIndexForMesh(const aiScene* scene, const aiMesh
 		else
 		{
 			index = static_cast<uint32_t>(renderer->pipelineFeed.textureImages.size());
-			cout << "texture index: " << index << endl;
 			readTexture(path.C_Str());
 			textureMap[key] = index;
 		}
@@ -218,8 +217,6 @@ uint32_t SceneManager::getTextureIndexForMesh(const aiScene* scene, const aiMesh
 
 void SceneManager::readTexture(const char* path)
 {
-	LOG("Initializing texture");
-
 	// read image data
 	int texWidth, texHeight, texChannels;
 	stbi_uc* pixels = stbi_load(path, &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);

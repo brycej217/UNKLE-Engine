@@ -39,7 +39,6 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
 	if (messageSeverity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
 	{
 		cerr << "validation layer: " << pCallbackData->pMessage << endl;
-		__debugbreak();
 	}
 	return VK_FALSE;
 }
@@ -57,8 +56,6 @@ namespace std {
 
 void Renderer::createInstance()
 {
-	LOG("Initializing vulkan instance");
-
 	// query instance extensions
 	vector<const char*> requiredInstanceExtensions;
 
@@ -141,8 +138,6 @@ void Renderer::createInstance()
 
 void Renderer::createDevice()
 {
-	LOG("Initializing vulkan device");
-
 	auto gpus = VK_ENUMERATE<VkPhysicalDevice>(vkEnumeratePhysicalDevices, instance);
 
 	if (gpus.empty())
@@ -150,7 +145,18 @@ void Renderer::createDevice()
 		throw runtime_error("No physical device found");
 	}
 
-	vector<const char*> requiredDeviceExtensions{ VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME };
+	vector<const char*> requiredDeviceExtensions
+	{ 
+		VK_KHR_SWAPCHAIN_EXTENSION_NAME, 
+		VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME,
+		VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME,
+		VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
+		VK_KHR_SPIRV_1_4_EXTENSION_NAME,
+		VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME,
+		VK_KHR_PIPELINE_LIBRARY_EXTENSION_NAME,
+		VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME, 
+		VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME
+	};
 
 	// find suitable gpu
 	for (const auto& gpu : gpus)
@@ -212,6 +218,26 @@ void Renderer::createDevice()
 		if (!supportedFeatures.samplerAnisotropy) continue;
 		if (!supportedFeatures.multiDrawIndirect) continue;
 
+		// ray tracing support query
+		VkPhysicalDeviceRayTracingPipelineFeaturesKHR rayTracingFeatures
+		{
+			.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR,
+		};
+		VkPhysicalDeviceAccelerationStructureFeaturesKHR accelerationFeatures
+		{
+			.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR,
+			.pNext = &rayTracingFeatures,
+		};
+		VkPhysicalDeviceFeatures2 supportedFeatures2
+		{
+			.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
+			.pNext = &accelerationFeatures
+		};
+		vkGetPhysicalDeviceFeatures2(gpu, &supportedFeatures2);
+
+		if (!accelerationFeatures.accelerationStructure) continue;
+		if (!rayTracingFeatures.rayTracingPipeline) continue;
+
 		this->gpu = gpu;
 	}
 
@@ -231,9 +257,28 @@ void Renderer::createDevice()
 		queueInfos.push_back(queueInfo);
 	}
 
+	VkPhysicalDeviceAccelerationStructureFeaturesKHR accelFeat
+	{
+		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR,
+		.accelerationStructure = VK_TRUE
+
+	};
+	VkPhysicalDeviceRayTracingPipelineFeaturesKHR rtFeat{
+		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR,
+		.pNext = &accelFeat,
+		.rayTracingPipeline = VK_TRUE
+	};
+	VkPhysicalDeviceBufferDeviceAddressFeatures bdaFeat{
+		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES,
+		.pNext = &rtFeat,
+		.bufferDeviceAddress = VK_TRUE,
+	};
+	bdaFeat.pNext = &rtFeat;
+
 	VkPhysicalDeviceDescriptorIndexingFeatures indexing
 	{
 		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES,
+		.pNext = &bdaFeat,
 		.shaderSampledImageArrayNonUniformIndexing = VK_TRUE,
 		.descriptorBindingPartiallyBound = VK_TRUE,
 		.descriptorBindingVariableDescriptorCount = VK_TRUE,
@@ -253,7 +298,7 @@ void Renderer::createDevice()
 		{
 			.multiDrawIndirect = VK_TRUE,
 			.drawIndirectFirstInstance = VK_TRUE,
-			.samplerAnisotropy = VK_TRUE
+			.samplerAnisotropy = VK_TRUE,
 		}
 	};
 
@@ -277,8 +322,6 @@ void Renderer::createDevice()
 
 void Renderer::createSwapchain()
 {
-	LOG("Initializing swapchain");
-
 	VkSurfaceCapabilitiesKHR surfaceProperties;
 	VK_CHECK(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(gpu, surface, &surfaceProperties));
 
@@ -362,7 +405,7 @@ void Renderer::createSwapchain()
 		.imageColorSpace = surfaceFormat.colorSpace,
 		.imageExtent = swapchainExtent,
 		.imageArrayLayers = 1,
-		.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+		.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
 		.imageSharingMode = imageSharingMode,
 		.queueFamilyIndexCount = static_cast<uint32_t>(queues.uniqueIndices.size()),
 		.pQueueFamilyIndices = queueFamilyIndices.data(),
@@ -422,13 +465,19 @@ void Renderer::createSwapchain()
 
 		// create per frame resources
 		createPerFrame(perFrame[i]);
+		perFrame[i].swapchainImage = swapchainImages[i];
 	}
+}
+
+void Renderer::switchPipeline()
+{
+	vkDeviceWaitIdle(device);
+
+	currPipeline = (currPipeline + 1) % 2;
 }
 
 void Renderer::resizeSwapchain()
 {
-	LOG("Resizing swapchain");
-
 	int width, height;
 	glfwGetFramebufferSize(window, &width, &height);
 	while (width == 0 || height == 0)
@@ -439,10 +488,12 @@ void Renderer::resizeSwapchain()
 
 	vkDeviceWaitIdle(device);
 
-	pipeline->destroyResizeResources();
-
 	createSwapchain();
-	pipeline->createFramebuffers();
+
+	for (auto& pipeline : pipelines)
+	{
+		pipeline->handleResize();
+	}
 }
 
 void Renderer::createPerFrame(PerFrame& perFrame)
@@ -517,13 +568,14 @@ void Renderer::destroyPerFrame(PerFrame& perFrame)
 void Renderer::createPipeline()
 {
 	createPipelineFeed();
-	pipeline = new Rasterizer(&device, &gpu, allocator, &swapchain, &pipelineFeed);
+	pipelines.push_back(new Rasterizer(&device, &gpu, allocator, &swapchain, &pipelineFeed));
+	pipelines.push_back(new RayTracer(&device, &gpu, allocator, &swapchain, &pipelineFeed, &queues));
+
+	currPipeline = 0;
 }
 
 void Renderer::createPipelineFeed()
 {
-	LOG("Create pipeline feed");
-
 	// create instance SSBO
 	VkDeviceSize instancesSize = pipelineFeed.instances.size() * sizeof(Instance);
 	allocator->createDeviceLocalBuffer(
@@ -540,7 +592,7 @@ void Renderer::createPipelineFeed()
 	allocator->createDeviceLocalBuffer(
 		pipelineFeed.transforms.data(),
 		transformsSize,
-		VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+		VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
 		0,
 		pipelineFeed.transformStagingBuffer,
 		pipelineFeed.transformSSBO,
@@ -559,10 +611,23 @@ void Renderer::createPipelineFeed()
 		&pipelineFeed.lightInfo
 	);
 
+	// create camera buffer
+	VkDeviceSize cameraSize = sizeof(CameraGPU);
+	allocator->createBuffer
+	(
+		cameraSize,
+		VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+		VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
+		VMA_MEMORY_USAGE_AUTO,
+		pipelineFeed.cameraBuffer,
+		&pipelineFeed.cameraInfo
+	);
+
 	// create indirect command SSBO
-	for (int i = 0; i < meshes.size(); i++)
+	for (int i = 0; i < pipelineFeed.meshes.size(); i++)
 	{
-		pipelineFeed.drawCommands.push_back(meshes[i].getDrawCommand());
+		pipelineFeed.drawCommands.push_back(pipelineFeed.meshes[i].getDrawCommand());
 	}
 	VkDeviceSize drawCommandBufferSize = pipelineFeed.drawCommands.size() * sizeof(VkDrawIndexedIndirectCommand);
 	VmaAllocationInfo drawCommandInfo;
@@ -603,20 +668,20 @@ void Renderer::createPipelineFeed()
 
 void Renderer::createVertexBuffer(vector<Vertex>& vertices, vector<uint32_t>& indices, VkBuffer& vertexBuffer, VkBuffer& indexBuffer)
 {
-	const VkDeviceSize vertexBufferSize = sizeof(vertices[0]) * vertices.size();
+	pipelineFeed.vertexBufferSize = sizeof(vertices[0]) * vertices.size();
 	allocator->createDeviceLocalBuffer(
 		(void*)vertices.data(),
-		vertexBufferSize,
-		VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+		pipelineFeed.vertexBufferSize,
+		VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
 		0,
 		vertexBuffer,
 		nullptr);
 
-	const VkDeviceSize indexBufferSize = sizeof(indices[0]) * indices.size();
+	pipelineFeed.indexBufferSize = sizeof(indices[0]) * indices.size();
 	allocator->createDeviceLocalBuffer(
 		(void*)indices.data(),
-		indexBufferSize,
-		VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+		pipelineFeed.indexBufferSize,
+		VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
 		0,
 		indexBuffer,
 		nullptr);
@@ -624,8 +689,6 @@ void Renderer::createVertexBuffer(vector<Vertex>& vertices, vector<uint32_t>& in
 
 void Renderer::createTexture(void* data, uint32_t imageSize, uint32_t texWidth, uint32_t texHeight)
 {
-	LOG("Initializing texture");
-
 	// create texture image
 	VkImage textureImage;
 	allocator->createTextureImage(
@@ -667,6 +730,13 @@ void Renderer::updateInstances(Camera camera, float deltaTime)
 	static float totalDelta;
 	totalDelta += deltaTime;
 
+	CameraGPU camGPU;
+
+	camGPU.viewInv = camera.transform.getWorldMatrix();
+	mat4 proj = perspective(radians(45.0f), swapchain.dimensions.width / (float)swapchain.dimensions.height, 0.1f, 10000.0f);
+	proj[1][1] *= -1;
+	camGPU.projInv = inverse(proj);
+
 	VkDeviceSize size = pipelineFeed.transforms.size() * sizeof(MVP);
 	uint8_t* base = static_cast<uint8_t*>(pipelineFeed.transformInfo.pMappedData);
 
@@ -676,14 +746,15 @@ void Renderer::updateInstances(Camera camera, float deltaTime)
 		{
 			.model = pipelineFeed.transforms[i].model,
 			.view = camera.getViewMatrix(),
-			.proj = perspective(radians(45.0f), swapchain.dimensions.width / (float)swapchain.dimensions.height, 0.1f, 100.0f)
+			.proj = proj
 		};
-		mvp.proj[1][1] *= -1;
 
 		memcpy(base + i * sizeof(MVP), &mvp, sizeof(MVP));
 	}
 
 	allocator->copyBuffer(size, pipelineFeed.transformStagingBuffer, pipelineFeed.transformSSBO);
+
+	memcpy(pipelineFeed.cameraInfo.pMappedData, &camGPU, sizeof(CameraGPU));
 }
 
 /*
@@ -762,7 +833,7 @@ void Renderer::render(Camera camera, float deltaTime)
 
 	updateInstances(camera, deltaTime);
 
-	pipeline->draw(index, perFrame, &queues.graphicsQueue, meshes);
+	pipelines[currPipeline]->draw(index, perFrame, &queues.graphicsQueue);
 	
 	res = presentImage(index);
 
@@ -795,8 +866,6 @@ Renderer::Renderer(GLFWwindow* window, uint32_t width, uint32_t height)
 
 Renderer::~Renderer()
 {
-	LOG("Destroying renderer");
-
 	vkDeviceWaitIdle(device);
 
 	for (auto& perFrame : perFrame)
@@ -809,7 +878,10 @@ Renderer::~Renderer()
 
 	pipelineFeed.cleanup(&device);
 
-	delete pipeline;
+	for (auto& pipeline : pipelines)
+	{
+		delete pipeline;
+	}
 
 	delete allocator;
 	

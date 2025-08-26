@@ -2,6 +2,7 @@
 
 #include "allocator.h"
 #include "rasterizer.h"
+#include "raytracer.h"
 #include "structs.h"
 
 #include <GLFW/glfw3.h>
@@ -36,7 +37,8 @@ public:
 
 	Queues queues;
 
-	Rasterizer* pipeline = nullptr;
+	vector<Pipeline*> pipelines;
+	uint32_t currPipeline;
 	Allocator* allocator = nullptr;
 
 	// swapchain data
@@ -45,7 +47,6 @@ public:
 	vector<PerFrame> perFrame;
 	
 	// draw call resources
-	vector<Mesh> meshes;
 	PipelineFeed pipelineFeed;
 
 	// initialization
@@ -60,6 +61,7 @@ public:
 
 	void createSwapchain();
 
+	void switchPipeline();
 
 	// utility
 

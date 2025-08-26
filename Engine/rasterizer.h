@@ -11,7 +11,7 @@ public:
 
 	Rasterizer(VkDevice* device, VkPhysicalDevice* gpu, Allocator* allocator, Swapchain* swapchain, PipelineFeed* pipelineFeed);
 
-	~Rasterizer();
+	~Rasterizer() override;
 
 	void createRenderPass();
 
@@ -21,9 +21,9 @@ public:
 
 	void createFramebuffers();
 
-	void destroyResizeResources();
+	void handleResize();
 
-	void draw(uint32_t imageIndex, vector<PerFrame>& perFrame, VkQueue* queue, vector<Mesh>& meshes);
+	void draw(uint32_t imageIndex, vector<PerFrame>& perFrame, VkQueue* queue);
 
 	VkFormat findDepthFormat(const vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features);
 };

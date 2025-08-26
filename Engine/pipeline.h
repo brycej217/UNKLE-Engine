@@ -33,9 +33,7 @@ public:
 
 	Pipeline(VkDevice* device, VkPhysicalDevice* gpu, Allocator* allocator, Swapchain* swapchain, PipelineFeed* pipelineFeed);
 
-	~Pipeline();
-
-	virtual void createRenderPass() = 0;
+	virtual ~Pipeline();
 
 	virtual void createPipeline() = 0;
 
@@ -43,9 +41,9 @@ public:
 
 	virtual void createFramebuffers() = 0;
 
-	virtual void destroyResizeResources() = 0;
+	virtual void handleResize() = 0;
 
-	virtual void draw(uint32_t imageIndex, vector<PerFrame>& perFrame, VkQueue* queue, vector<Mesh>& meshes) = 0;
+	virtual void draw(uint32_t imageIndex, vector<PerFrame>& perFrame, VkQueue* queue) = 0;
 
 	// utility
 

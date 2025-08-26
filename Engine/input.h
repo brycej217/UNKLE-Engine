@@ -10,6 +10,7 @@ enum class Key
 	D,
 	E,
 	Q,
+	G,
 	Count
 };
 

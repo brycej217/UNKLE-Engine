@@ -11,6 +11,7 @@ void Input::keyCallback(GLFWwindow* window, int key, int scancode, int action, i
 	if (key == GLFW_KEY_D) input->_inputBuffer[static_cast<int>(Key::D)] = action != GLFW_RELEASE;
 	if (key == GLFW_KEY_E) input->_inputBuffer[static_cast<int>(Key::E)] = action != GLFW_RELEASE;
 	if (key == GLFW_KEY_Q) input->_inputBuffer[static_cast<int>(Key::Q)] = action != GLFW_RELEASE;
+	if (key == GLFW_KEY_G) input->_inputBuffer[static_cast<int>(Key::G)] = action == GLFW_PRESS && action != GLFW_REPEAT;
 }
 
 void Input::cursorCallback(GLFWwindow* window, double xPos, double yPos)

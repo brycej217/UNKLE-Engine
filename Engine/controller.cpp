@@ -36,6 +36,7 @@ void Controller::update(Input* input, Camera* camera, float deltaTime)
 	vec3 forward = camera->getForward();
 	vec3 right = camera->getRight();
 	vec3 up = camera->getUp();
+
 	for (int i = 0; i < static_cast<int>(Key::Count); i++)
 	{
 		if (input->getInputBuffer()[i])

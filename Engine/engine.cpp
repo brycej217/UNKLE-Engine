@@ -45,6 +45,12 @@ void Engine::run()
 
 		_controller.update(&_input, &_camera, deltaTime);
 
+		if (_input.getInputBuffer()[static_cast<int>(Key::G)])
+		{
+			_renderer.switchPipeline();
+			_input.getInputBuffer()[static_cast<int>(Key::G)] = false;
+		}
+
 		_renderer.render(_camera, deltaTime);
 	}
 }

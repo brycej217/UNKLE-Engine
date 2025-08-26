@@ -5,8 +5,6 @@ using namespace std;
 
 void Rasterizer::createRenderPass()
 {
-	LOG("Initializing render pass");
-
 	VkAttachmentDescription colorAttachment
 	{
 		.format = swapchain->dimensions.format,
@@ -68,8 +66,6 @@ void Rasterizer::createRenderPass()
 
 void Rasterizer::createPipeline()
 {
-	LOG("Initializing pipeline");
-
 	// define vertex inputs
 	VkPipelineInputAssemblyStateCreateInfo inputAssembly
 	{
@@ -211,12 +207,8 @@ void Rasterizer::createPipeline()
 
 void Rasterizer::createDescriptorSets()
 {
-	LOG("Initializing descriptor sets");
-
 	uint32_t textureCount = static_cast<uint32_t>(pipelineFeed->textureImageViews.size());
 	uint32_t maxTextureCount = std::max<uint32_t>(textureCount, 1);
-	
-	cout << "texture count: " << textureCount << endl;
 
 	// define descriptor set bindings
 	VkDescriptorSetLayoutBinding instanceBinding
@@ -391,14 +383,11 @@ void Rasterizer::createDescriptorSets()
 		.pImageInfo = imageInfos.data()
 	};
 
-
 	vkUpdateDescriptorSets(*device, static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
 }
 
 void Rasterizer::createFramebuffers()
 {
-	LOG("Initializing framebuffers");
-
 	VkFormat depthFormat = findDepthFormat({ VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT }, VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
 
 	swapchainFramebuffers.clear();
@@ -465,7 +454,7 @@ void Rasterizer::createFramebuffers()
 * - Depth Image Views
 * - Framebuffers
 */
-void Rasterizer::destroyResizeResources()
+void Rasterizer::handleResize()
 {
 	for (auto depthImage : depthImages)
 	{
@@ -484,9 +473,11 @@ void Rasterizer::destroyResizeResources()
 		vkDestroyFramebuffer(*device, framebuffer, nullptr);
 		framebuffer = VK_NULL_HANDLE;
 	}
+
+	createFramebuffers();
 }
 
-void Rasterizer::draw(uint32_t imageIndex, vector<PerFrame>& perFrame, VkQueue* queue, vector<Mesh>& meshes)
+void Rasterizer::draw(uint32_t imageIndex, vector<PerFrame>& perFrame, VkQueue* queue)
 {
 	VkFramebuffer framebuffer = swapchainFramebuffers[imageIndex];
 	VkCommandBuffer commandBuffer = perFrame[imageIndex].commandBuffer;

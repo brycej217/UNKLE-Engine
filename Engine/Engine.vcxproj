@@ -146,6 +146,7 @@
     <ClCompile Include="main.cpp" />
     <ClCompile Include="pipeline.cpp" />
     <ClCompile Include="rasterizer.cpp" />
+    <ClCompile Include="raytracer.cpp" />
     <ClCompile Include="renderer.cpp" />
     <ClCompile Include="scene.cpp" />
   </ItemGroup>
@@ -155,6 +156,7 @@
     <ClInclude Include="engine.h" />
     <ClInclude Include="input.h" />
     <ClInclude Include="pipeline.h" />
+    <ClInclude Include="raytracer.h" />
     <ClInclude Include="scene.h" />
     <ClInclude Include="structs.h" />
     <ClInclude Include="rasterizer.h" />
@@ -164,8 +166,13 @@
   <ItemGroup>
     <None Include="shaders\compile.bat" />
     <None Include="shaders\frag.spv" />
+    <None Include="shaders\hit.rchit" />
+    <None Include="shaders\miss.rmiss" />
+    <None Include="shaders\raygen.rgen" />
     <None Include="shaders\shader.frag" />
     <None Include="shaders\shader.vert" />
+    <None Include="shaders\shadow_hit.rahit" />
+    <None Include="shaders\shadow_miss.rmiss" />
     <None Include="shaders\vert.spv" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

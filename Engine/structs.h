@@ -14,6 +14,7 @@ using namespace std;
 
 struct PerFrame
 {
+	VkImage swapchainImage = VK_NULL_HANDLE;
 	VkFence queueSubmitFence = VK_NULL_HANDLE;
 	VkSemaphore swapchainAcquireSemaphore = VK_NULL_HANDLE;
 	VkSemaphore swapchainReleaseSemaphore = VK_NULL_HANDLE;
@@ -68,17 +69,19 @@ struct Instance
 {
 	uint32_t transformIndex;
 	uint32_t textureIndex;
-	uint32_t pad0;
-	uint32_t pad1;
+	uint32_t baseIndex;
+	uint32_t baseVertex;
 };
 
 struct Mesh
 {
-	uint32_t indexCount = 0;
-	uint32_t instanceCount = 0;
-	int32_t vertexOffset = 0;
+	int32_t vertexOffset = 0; // first vertex corrseponding to this mesh
+	uint32_t vertexCount = 0;
 
+	uint32_t indexCount = 0;
 	uint32_t firstIndex = 0;
+
+	uint32_t instanceCount = 0;
 	uint32_t firstInstance = -1;
 
 	VkDrawIndexedIndirectCommand getDrawCommand()
@@ -94,17 +97,6 @@ struct Mesh
 
 		return drawCommand;
 	}
-
-	void printDrawCommand()
-	{
-		VkDrawIndexedIndirectCommand drawCommand = getDrawCommand();
-
-		cout << "Index count: " << drawCommand.indexCount << endl;
-		cout << "Instance count: " << drawCommand.instanceCount << endl;
-		cout << "First index: " << drawCommand.firstIndex << endl;
-		cout << "Vertex offset: " << drawCommand.vertexOffset << endl;
-		cout << "First instance: " << drawCommand.firstInstance << endl;
-	};
 };
 
 struct Light
@@ -123,15 +115,23 @@ struct MVP
 
 struct PipelineFeed
 {
+	vector<Mesh> meshes;
+
 	vector<VkDrawIndexedIndirectCommand> drawCommands;
 	VkBuffer drawCommandBuffer;
 
 	VkBuffer vertexSSBO;
+	VkDeviceSize vertexBufferSize;
+
 	VkBuffer indexSSBO;
+	VkDeviceSize indexBufferSize;
 
 	vector<Instance> instances;
 	VkBuffer instanceSSBO;
 	VmaAllocationInfo instanceInfo;
+
+	VkBuffer cameraBuffer;
+	VmaAllocationInfo cameraInfo;
 
 	vector<MVP> transforms;
 	VkBuffer transformSSBO;
@@ -176,6 +176,12 @@ struct Transform
 	vec3 getRight() const { return rotation * vec3(1.0f, 0.0f, 0.0f); }
 };
 
+struct CameraGPU
+{
+	mat4 viewInv;
+	mat4 projInv;
+};
+
 struct Camera
 {
 	Transform transform;
@@ -192,9 +198,9 @@ struct Camera
 
 struct Vertex
 {
-	vec3 position;
-	vec3 normal;
-	vec2 texCoord;
+	vec3 position; float _pad0;
+	vec3 normal; float _pad1;
+	vec2 texCoord; vec2 _pad2;
 
 	bool operator==(const Vertex& other) const
 	{

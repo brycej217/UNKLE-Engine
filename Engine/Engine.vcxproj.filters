@@ -28,6 +28,9 @@
     <ClCompile Include="scene.cpp">
       <Filter>engine\src</Filter>
     </ClCompile>
+    <ClCompile Include="raytracer.cpp">
+      <Filter>renderer\src</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="renderer.h">
@@ -59,6 +62,9 @@
     </ClInclude>
     <ClInclude Include="utils.h">
       <Filter>engine\include</Filter>
+    </ClInclude>
+    <ClInclude Include="raytracer.h">
+      <Filter>renderer\include</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -101,6 +107,21 @@
       <Filter>shaders</Filter>
     </None>
     <None Include="shaders\vert.spv">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\hit.rchit">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\miss.rmiss">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\raygen.rgen">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\shadow_hit.rahit">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\shadow_miss.rmiss">
       <Filter>shaders</Filter>
     </None>
   </ItemGroup>

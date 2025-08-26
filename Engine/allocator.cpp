@@ -298,6 +298,13 @@ void Allocator::transitionImageLayout(VkImage& image, VkFormat format, VkImageAs
 		sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
 		destinationStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
 	}
+	else if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_GENERAL)
+	{
+		barrier.srcAccessMask = 0;
+		barrier.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+		sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+		destinationStage = VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR;
+	}
 
 	VkCommandPool commandPool;
 	VkCommandBuffer commandBuffer;
@@ -318,6 +325,7 @@ Allocator::Allocator(VkPhysicalDevice& gpu, VkDevice& device, VkInstance& instan
 
 	VmaAllocatorCreateInfo allocatorInfo
 	{
+		.flags = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT,
 		.physicalDevice = gpu,
 		.device = device,
 		.pVulkanFunctions = &vmaVulkanFunc,
