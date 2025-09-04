@@ -1,12 +1,24 @@
 #pragma once
 #include "pipeline.h"
 
+#include "unk_blas.h"
+#include "unk_tlas.h"
+#include "unk_as_descriptor.h"
+
 using namespace glm;
 
-struct AccelerationStructure
+// define descriptor set bindings
+enum
 {
-	VkAccelerationStructureKHR handle = VK_NULL_HANDLE;
-	uint64_t deviceAddress = 0;
+	INSTANCE_BINDING,
+	TRANSFORM_BINDING,
+	LIGHT_BINDING,
+	AS_BINDING,
+	RESULT_BINDING,
+	CAMERA_BINDING,
+	VERTEX_BINDING,
+	INDEX_BINDING,
+	TEXTURE_BINDING
 };
 
 struct ShaderBindingTable
@@ -15,7 +27,7 @@ struct ShaderBindingTable
 	uint32_t handleAlign;
 	uint32_t baseAlign;
 
-	VkBuffer sbtBuffer = VK_NULL_HANDLE;
+	UnkBuffer* sbtBuffer;
 	VkDeviceAddress sbtBase = 0;
 	VkStridedDeviceAddressRegionKHR sbtRaygen{}, sbtMiss{}, sbtHit{}, sbtCallable{};
 };
@@ -23,31 +35,20 @@ struct ShaderBindingTable
 class RayTracer : public Pipeline
 {
 public:
-	PFN_vkGetBufferDeviceAddressKHR vkGetBufferDeviceAddressKHR{ nullptr };
-	PFN_vkCmdBuildAccelerationStructuresKHR vkCmdBuildAccelerationStructuresKHR{ nullptr };
-	PFN_vkGetAccelerationStructureDeviceAddressKHR vkGetAccelerationStructureDeviceAddressKHR{ nullptr };
-	PFN_vkGetAccelerationStructureBuildSizesKHR vkGetAccelerationStructureBuildSizesKHR{ nullptr };
-	PFN_vkCreateRayTracingPipelinesKHR vkCreateRayTracingPipelinesKHR{ nullptr };
-	PFN_vkGetRayTracingShaderGroupHandlesKHR vkGetRayTracingShaderGroupHandlesKHR{ nullptr };
-	PFN_vkCmdTraceRaysKHR vkCmdTraceRaysKHR{ nullptr };
-	PFN_vkCreateAccelerationStructureKHR vkCreateAccelerationStructureKHR{ nullptr };
-	PFN_vkDestroyAccelerationStructureKHR vkDestroyAccelerationStructureKHR{ nullptr };
+	UnkImage* resultImage;
 
-	Queues* queues;
+	vector<UnkBlas*> blasses;
+	UnkTlas* tlas;
 
-	VkImage storageImage = VK_NULL_HANDLE;
-	VkImageView storageImageView = VK_NULL_HANDLE;
-	vector<AccelerationStructure> bottomLevelASStructures;
-	AccelerationStructure topLevelAS;
 	ShaderBindingTable sbt;
 
 	RayTracer() = default;
 
-	RayTracer(VkDevice* device, VkPhysicalDevice* gpu, Allocator* allocator, Swapchain* swapchain, PipelineFeed* pipelineFeed, Queues* queues);
+	RayTracer(UnkDevice* device, UnkSwapchain* swapchain, DeviceResources* resources);
 
 	~RayTracer() override;
 
-	void createFramebuffers();
+	void createResultImage();
 
 	void createDescriptorSets();
 
@@ -57,13 +58,9 @@ public:
 
 	void createShaderBindingTable();
 
-	void draw(uint32_t imageIndex, vector<PerFrame>& perFrame, VkQueue* queue);
+	void draw(uint32_t imageIndex);
 
 	void createAccelerationStructures();
-
-	AccelerationStructure createBottomLevelAccelerationStructure(Mesh mesh);
-
-	AccelerationStructure createTopLevelAccelerationStructure();
 
 	// util
 	uint64_t getBufferDeviceAddress(VkBuffer buffer);

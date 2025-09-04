@@ -2,6 +2,11 @@
 #include <fstream>
 #include <stb_image.h>
 
+Pipeline::Pipeline()
+{
+
+}
+
 VkShaderModule Pipeline::loadShaderModule(const string& path)
 {
 	ifstream file(path, ios::ate | ios::binary);
@@ -24,48 +29,34 @@ VkShaderModule Pipeline::loadShaderModule(const string& path)
 	};
 
 	VkShaderModule shaderModule;
-	VK_CHECK(vkCreateShaderModule(*device, &createInfo, nullptr, &shaderModule));
+	vkCreateShaderModule(device->device, &createInfo, nullptr, &shaderModule);
 	return shaderModule;
-}
-
-Pipeline::Pipeline(VkDevice* device, VkPhysicalDevice* gpu, Allocator* allocator, Swapchain* swapchain, PipelineFeed* pipelineFeed)
-{
-	this->device = device;
-	this->gpu = gpu;
-	this->allocator = allocator;
-	this->swapchain = swapchain;
-	this->pipelineFeed = pipelineFeed;
 }
 
 Pipeline::~Pipeline()
 {
-	for (auto& framebuffer : swapchainFramebuffers)
+	if (descriptorPool != VK_NULL_HANDLE)
 	{
-		vkDestroyFramebuffer(*device, framebuffer, nullptr);
+		vkDestroyDescriptorPool(device->device, descriptorPool, nullptr);
 	}
 
 	if (descriptorSetLayout != VK_NULL_HANDLE)
 	{
-		vkDestroyDescriptorSetLayout(*device, descriptorSetLayout, nullptr);
+		vkDestroyDescriptorSetLayout(device->device, descriptorSetLayout, nullptr);
 	}
 
-	if (descriptorPool != VK_NULL_HANDLE)
+	for (auto& descriptor : descriptors)
 	{
-		vkDestroyDescriptorPool(*device, descriptorPool, nullptr);
+		delete descriptor;
 	}
 
 	if (pipeline != VK_NULL_HANDLE)
 	{
-		vkDestroyPipeline(*device, pipeline, nullptr);
+		vkDestroyPipeline(device->device, pipeline, nullptr);
 	}
 
 	if (pipelineLayout != VK_NULL_HANDLE)
 	{
-		vkDestroyPipelineLayout(*device, pipelineLayout, nullptr);
-	}
-
-	if (renderPass != VK_NULL_HANDLE)
-	{
-		vkDestroyRenderPass(*device, renderPass, nullptr);
+		vkDestroyPipelineLayout(device->device, pipelineLayout, nullptr);
 	}
 }

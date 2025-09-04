@@ -3,11 +3,169 @@
 
 using namespace std;
 
+Rasterizer::Rasterizer(UnkDevice* device, UnkSwapchain* swapchain, DeviceResources* resources)
+{
+	this->device = device;
+	this->swapchain = swapchain;
+	this->resources = resources;
+
+	createDescriptorSets(); // must be created before pipeline creation (pipeline layout)
+
+	createRenderPass();
+	createPipeline();
+	createFramebuffers();
+}
+
+void Rasterizer::createDescriptorSets()
+{
+	enum
+	{
+		INSTANCE_BINDING,
+		TRANSFORM_BINDING,
+		LIGHT_BINDING,
+		TEXTURE_BINDING
+	};
+
+	uint32_t rawTextureCount = static_cast<uint32_t>(resources->textureImages.size());
+	uint32_t textureCount = std::max<uint32_t>(rawTextureCount, 1);
+
+	vector<VkDescriptorSetLayoutBinding> bindings;
+	vector<VkDescriptorBindingFlags> flags;
+
+	UnkDescriptor* instanceBufferDescriptor = new UnkBufferDescriptor
+	(
+		resources->instanceBuffer,
+		&descriptorSet,
+		INSTANCE_BINDING,
+		VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		1,
+		VK_SHADER_STAGE_VERTEX_BIT,
+		0
+	);
+	descriptors.push_back(instanceBufferDescriptor);
+	bindings.push_back(instanceBufferDescriptor->getLayoutBinding());
+	flags.push_back(instanceBufferDescriptor->bindingFlags);
+
+	UnkDescriptor* transformBufferDescriptor = new UnkBufferDescriptor
+	(
+		resources->transformBuffer,
+		&descriptorSet,
+		TRANSFORM_BINDING,
+		VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		1,
+		VK_SHADER_STAGE_VERTEX_BIT,
+		0
+	);
+	descriptors.push_back(transformBufferDescriptor);
+	bindings.push_back(transformBufferDescriptor->getLayoutBinding());
+	flags.push_back(transformBufferDescriptor->bindingFlags);
+
+	UnkDescriptor* lightBufferDescriptor = new UnkBufferDescriptor
+	(
+		resources->lightBuffer,
+		&descriptorSet,
+		LIGHT_BINDING,
+		VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		1,
+		VK_SHADER_STAGE_FRAGMENT_BIT,
+		0
+	);
+	descriptors.push_back(lightBufferDescriptor);
+	bindings.push_back(lightBufferDescriptor->getLayoutBinding());
+	flags.push_back(lightBufferDescriptor->bindingFlags);
+
+	UnkDescriptor* textureImagesDescriptor = new UnkImageDescriptor
+	(
+		resources->textureImages,
+		&descriptorSet,
+		TEXTURE_BINDING,
+		VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+		textureCount,
+		VK_SHADER_STAGE_FRAGMENT_BIT,
+		VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT |
+		VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT_EXT |
+		VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT_EXT,
+		VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+	);
+	descriptors.push_back(textureImagesDescriptor);
+	bindings.push_back(textureImagesDescriptor->getLayoutBinding());
+	flags.push_back(textureImagesDescriptor->bindingFlags);
+
+	const size_t n = bindings.size();
+	VkDescriptorSetLayoutBindingFlagsCreateInfo bindingFlags
+	{
+		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO_EXT,
+		.bindingCount = static_cast<uint32_t>(n),
+		.pBindingFlags = flags.data(),
+	};
+
+	// define descriptor set layout (wrap all bindings)
+	VkDescriptorSetLayoutCreateInfo descriptorSetLayoutInfo
+	{
+		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+		.pNext = &bindingFlags,
+		.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT_EXT,
+		.bindingCount = static_cast<uint32_t>(bindings.size()),
+		.pBindings = bindings.data()
+	};
+	VK_CHECK(vkCreateDescriptorSetLayout(device->device, &descriptorSetLayoutInfo, nullptr, &descriptorSetLayout));
+
+	// Create descriptor sets
+	vector<VkDescriptorPoolSize> poolSizes;
+	for (int i = 0; i < descriptors.size(); i++)
+	{
+		VkDescriptorPoolSize poolSize
+		{
+			.type = descriptors[i]->descriptorType,
+			.descriptorCount = descriptors[i]->count
+		};
+		poolSizes.push_back(poolSize);
+	}
+
+	VkDescriptorPoolCreateInfo descriptorPoolCreateInfo
+	{
+		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+		.flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT,
+		.maxSets = 1,
+		.poolSizeCount = static_cast<uint32_t>(n),
+		.pPoolSizes = poolSizes.data(),
+	};
+	VK_CHECK(vkCreateDescriptorPool(device->device, &descriptorPoolCreateInfo, nullptr, &descriptorPool));
+
+	uint32_t counts[] = { textureCount };
+	VkDescriptorSetVariableDescriptorCountAllocateInfo varCount
+	{
+		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO,
+		.descriptorSetCount = 1,
+		.pDescriptorCounts = counts
+	};
+
+	// allocate descriptors
+	VkDescriptorSetAllocateInfo descriptorSetAllocateInfo
+	{
+		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+		.pNext = &varCount,
+		.descriptorPool = descriptorPool,
+		.descriptorSetCount = 1,
+		.pSetLayouts = &descriptorSetLayout
+	};
+	VK_CHECK(vkAllocateDescriptorSets(device->device, &descriptorSetAllocateInfo, &descriptorSet));
+
+
+	// link descriptors to buffer and image handles
+	vector<VkWriteDescriptorSet> writes;
+	for (int i = 0; i < descriptors.size(); i++)
+	{
+		writes.push_back(descriptors[i]->getDescriptorWrite());
+	}
+	vkUpdateDescriptorSets(device->device, writes.size(), writes.data(), 0, nullptr);
+}
+
 void Rasterizer::createRenderPass()
 {
 	VkAttachmentDescription colorAttachment
 	{
-		.format = swapchain->dimensions.format,
+		.format = swapchain->surfaceFormat.format,
 		.samples = VK_SAMPLE_COUNT_1_BIT,
 		.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
 		.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
@@ -61,7 +219,7 @@ void Rasterizer::createRenderPass()
 		.pDependencies = &dependency
 	};
 
-	VK_CHECK(vkCreateRenderPass(*device, &renderPassInfo, nullptr, &renderPass));
+	VK_CHECK(vkCreateRenderPass(device->device, &renderPassInfo, nullptr, &renderPass));
 }
 
 void Rasterizer::createPipeline()
@@ -103,7 +261,7 @@ void Rasterizer::createPipeline()
 		.setLayoutCount = 1,
 		.pSetLayouts = &descriptorSetLayout
 	};
-	VK_CHECK(vkCreatePipelineLayout(*device, &pipelineLayoutInfo, nullptr, &pipelineLayout));
+	VK_CHECK(vkCreatePipelineLayout(device->device, &pipelineLayoutInfo, nullptr, &pipelineLayout));
 
 	// define basic settings
 	VkPipelineRasterizationStateCreateInfo rasterizer
@@ -199,235 +357,38 @@ void Rasterizer::createPipeline()
 		.renderPass = renderPass
 	};
 
-	VK_CHECK(vkCreateGraphicsPipelines(*device, VK_NULL_HANDLE, 1, &pipelineCreateInfo, nullptr, &pipeline));
+	VK_CHECK(vkCreateGraphicsPipelines(device->device, VK_NULL_HANDLE, 1, &pipelineCreateInfo, nullptr, &pipeline));
 
-	vkDestroyShaderModule(*device, shaderStages[0].module, nullptr);
-	vkDestroyShaderModule(*device, shaderStages[1].module, nullptr);
-}
-
-void Rasterizer::createDescriptorSets()
-{
-	uint32_t textureCount = static_cast<uint32_t>(pipelineFeed->textureImageViews.size());
-	uint32_t maxTextureCount = std::max<uint32_t>(textureCount, 1);
-
-	// define descriptor set bindings
-	VkDescriptorSetLayoutBinding instanceBinding
-	{
-		.binding = 0,
-		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-		.descriptorCount = 1,
-		.stageFlags = VK_SHADER_STAGE_VERTEX_BIT
-	};
-
-	VkDescriptorSetLayoutBinding transformBinding
-	{
-		.binding = 1,
-		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-		.descriptorCount = 1,
-		.stageFlags = VK_SHADER_STAGE_VERTEX_BIT
-	};
-
-	VkDescriptorSetLayoutBinding lightBinding
-	{
-		.binding = 2,
-		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-		.descriptorCount = 1,
-		.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
-	};
-
-	VkDescriptorSetLayoutBinding textureBinding
-	{
-		.binding = 3,
-		.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-		.descriptorCount = maxTextureCount,
-		.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
-	};
-
-	array<VkDescriptorSetLayoutBinding, 4> bindings = { instanceBinding, transformBinding, lightBinding, textureBinding };
-
-	const VkDescriptorBindingFlags textureBindingFlag =
-		VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT |
-		VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT_EXT |
-		VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT_EXT;
-
-	array<VkDescriptorBindingFlags, 4> flags = { 0, 0, 0, textureBindingFlag };
-
-	VkDescriptorSetLayoutBindingFlagsCreateInfo bindingFlags
-	{
-		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO_EXT,
-		.bindingCount = bindings.size(),
-		.pBindingFlags = flags.data(),
-	};
-
-	// define descriptor set layout (wrap all bindings)
-	VkDescriptorSetLayoutCreateInfo descriptorSetLayoutInfo
-	{
-		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-		.pNext = &bindingFlags,
-		.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT_EXT,
-		.bindingCount = static_cast<uint32_t>(bindings.size()),
-		.pBindings = bindings.data()
-	};
-	VK_CHECK(vkCreateDescriptorSetLayout(*device, &descriptorSetLayoutInfo, nullptr, &descriptorSetLayout));
-
-	// Create descriptor sets
-	VkDescriptorPoolSize poolSizes[] =
-	{
-		{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1},
-		{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1},
-		{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1},
-		{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, maxTextureCount}
-	};
-
-	VkDescriptorPoolCreateInfo descriptorPoolCreateInfo
-	{
-		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-		.flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT,
-		.maxSets = 1,
-		.poolSizeCount = (uint32_t)std::size(poolSizes),
-		.pPoolSizes = poolSizes,
-	};
-	VK_CHECK(vkCreateDescriptorPool(*device, &descriptorPoolCreateInfo, nullptr, &descriptorPool));
-
-	uint32_t counts[] = { maxTextureCount };
-	VkDescriptorSetVariableDescriptorCountAllocateInfo varCount
-	{
-		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO,
-		.descriptorSetCount = 1,
-		.pDescriptorCounts = counts
-	};
-
-	// allocate descriptors
-	VkDescriptorSetAllocateInfo descriptorSetAllocateInfo
-	{
-		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-		.pNext = &varCount,
-		.descriptorPool = descriptorPool,
-		.descriptorSetCount = 1,
-		.pSetLayouts = &descriptorSetLayout
-	};
-	VK_CHECK(vkAllocateDescriptorSets(*device, &descriptorSetAllocateInfo, &descrptorSet));
-
-
-	// link descriptors to buffer and image handles
-	vector<VkWriteDescriptorSet> writes(4);
-	VkDescriptorBufferInfo instanceInfo
-	{
-		.buffer = pipelineFeed->instanceSSBO,
-		.offset = 0,
-		.range = pipelineFeed->instances.size() * sizeof(Instance)
-	};
-	writes[0] =
-	{
-		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-		.dstSet = descrptorSet,
-		.dstBinding = 0,
-		.dstArrayElement = 0,
-		.descriptorCount = 1,
-		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-		.pBufferInfo = &instanceInfo
-	};
-
-	VkDescriptorBufferInfo transformInfo
-	{
-		.buffer = pipelineFeed->transformSSBO,
-		.offset = 0,
-		.range = pipelineFeed->transforms.size() * sizeof(MVP)
-	};
-	writes[1] =
-	{
-		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-		.dstSet = descrptorSet,
-		.dstBinding = 1,
-		.dstArrayElement = 0,
-		.descriptorCount = 1,
-		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-		.pBufferInfo = &transformInfo
-	};
-
-	VkDescriptorBufferInfo lightInfo
-	{
-		.buffer = pipelineFeed->lightSSBO,
-		.offset = 0,
-		.range = pipelineFeed->lights.size() * sizeof(Light)
-	};
-	writes[2] =
-	{
-		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-		.dstSet = descrptorSet,
-		.dstBinding = 2,
-		.dstArrayElement = 0,
-		.descriptorCount = 1,
-		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-		.pBufferInfo = &lightInfo
-	};
-
-	vector<VkDescriptorImageInfo> imageInfos(textureCount);
-	for (int i = 0; i < textureCount; i++)
-	{
-		imageInfos[i] =
-		{
-			pipelineFeed->textureImageSampler,
-			pipelineFeed->textureImageViews[i],
-			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-		};
-	}
-	writes[3] =
-	{
-		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-		.dstSet = descrptorSet,
-		.dstBinding = 3,
-		.dstArrayElement = 0,
-		.descriptorCount = textureCount,
-		.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-		.pImageInfo = imageInfos.data()
-	};
-
-	vkUpdateDescriptorSets(*device, static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
+	vkDestroyShaderModule(device->device, shaderStages[0].module, nullptr);
+	vkDestroyShaderModule(device->device, shaderStages[1].module, nullptr);
 }
 
 void Rasterizer::createFramebuffers()
 {
 	VkFormat depthFormat = findDepthFormat({ VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT }, VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
 
-	swapchainFramebuffers.clear();
-	for (auto& imageView : swapchain->imageViews)
+	framebuffers.clear();
+
+	for (auto& image : swapchain->images)
 	{
-		VkImage depthImage;
-		VkImageView depthImageView;
-		// create depth image
-		allocator->createImage(depthFormat,
+		UnkImage* depthImage = new UnkImage
+		(
+			device,
+			swapchain->extent.width,
+			swapchain->extent.height,
+			depthFormat,
 			VK_IMAGE_TILING_OPTIMAL,
 			VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-			VMA_MEMORY_USAGE_GPU_ONLY,
-			swapchain->dimensions.width,
-			swapchain->dimensions.height,
-			depthImage,
-			nullptr);
-		allocator->transitionImageLayout(depthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
-
-		VkImageViewCreateInfo viewInfo
-		{
-			.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-			.image = depthImage,
-			.viewType = VK_IMAGE_VIEW_TYPE_2D,
-			.format = depthFormat,
-			.subresourceRange =
-			{
-				.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
-				.baseMipLevel = 0,
-				.levelCount = 1,
-				.baseArrayLayer = 0,
-				.layerCount = 1
-			},
-		};
-		VK_CHECK(vkCreateImageView(*device, &viewInfo, nullptr, &depthImageView));
+			true,
+			VK_IMAGE_ASPECT_DEPTH_BIT
+		);
+		depthImage->transitionImageLayout(VK_IMAGE_ASPECT_DEPTH_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 		depthImages.push_back(depthImage);
 
 		array<VkImageView, 2> attachments =
 		{
-			imageView,
-			depthImageView
+			image->view,
+			depthImage->view
 		};
 
 		VkFramebufferCreateInfo framebufferInfo
@@ -436,15 +397,14 @@ void Rasterizer::createFramebuffers()
 			.renderPass = renderPass,
 			.attachmentCount = static_cast<uint32_t>(attachments.size()),
 			.pAttachments = attachments.data(),
-			.width = swapchain->dimensions.width,
-			.height = swapchain->dimensions.height,
+			.width = swapchain->extent.width,
+			.height = swapchain->extent.height,
 			.layers = 1
 		};
 
 		VkFramebuffer framebuffer;
-		VK_CHECK(vkCreateFramebuffer(*device, &framebufferInfo, nullptr, &framebuffer));
-		swapchainFramebuffers.push_back(framebuffer);
-		depthImageViews.push_back(depthImageView);
+		vkCreateFramebuffer(device->device, &framebufferInfo, nullptr, &framebuffer);
+		framebuffers.push_back(framebuffer);
 	}
 }
 
@@ -458,36 +418,25 @@ void Rasterizer::handleResize()
 {
 	for (auto depthImage : depthImages)
 	{
-		allocator->destroyImage(depthImage);
+		delete depthImage;
 	}
 	depthImages.clear();
 
-	for (auto& depthImageView : depthImageViews)
+	for (auto& framebuffer : framebuffers)
 	{
-		vkDestroyImageView(*device, depthImageView, nullptr);
-		depthImageView = VK_NULL_HANDLE;
-	}
-
-	for (auto& framebuffer : swapchainFramebuffers)
-	{
-		vkDestroyFramebuffer(*device, framebuffer, nullptr);
+		vkDestroyFramebuffer(device->device, framebuffer, nullptr);
 		framebuffer = VK_NULL_HANDLE;
 	}
 
 	createFramebuffers();
 }
 
-void Rasterizer::draw(uint32_t imageIndex, vector<PerFrame>& perFrame, VkQueue* queue)
+void Rasterizer::draw(uint32_t index)
 {
-	VkFramebuffer framebuffer = swapchainFramebuffers[imageIndex];
-	VkCommandBuffer commandBuffer = perFrame[imageIndex].commandBuffer;
+	VkFramebuffer framebuffer = framebuffers[index];
+	UnkCommandBuffer* commandBuffer = swapchain->frames[index].commandBuffer;
+	commandBuffer->beginCommand();
 
-	VkCommandBufferBeginInfo beginInfo
-	{
-		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-		.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT
-	};
-	vkBeginCommandBuffer(commandBuffer, &beginInfo);
 
 	array<VkClearValue, 2> clearValues{};
 	clearValues[0].color = { {0.0f, 0.0f, 0.0f, 1.0f} };
@@ -502,56 +451,59 @@ void Rasterizer::draw(uint32_t imageIndex, vector<PerFrame>& perFrame, VkQueue* 
 		{
 			.extent =
 			{
-				.width = swapchain->dimensions.width,
-				.height = swapchain->dimensions.height
+				.width = swapchain->extent.width,
+				.height = swapchain->extent.height
 			}
 		},
 		.clearValueCount = static_cast<uint32_t>(clearValues.size()),
 		.pClearValues = clearValues.data()
 	};
 
-	vkCmdBeginRenderPass(commandBuffer, &renderPassBegin, VK_SUBPASS_CONTENTS_INLINE);
-
-	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+	vkCmdBeginRenderPass(commandBuffer->handle, &renderPassBegin, VK_SUBPASS_CONTENTS_INLINE);
+	vkCmdBindPipeline(commandBuffer->handle, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 
 	VkViewport viewport
 	{
-		.width = static_cast<float>(swapchain->dimensions.width),
-		.height = static_cast<float>(swapchain->dimensions.height),
+		.width = static_cast<float>(swapchain->extent.width),
+		.height = static_cast<float>(swapchain->extent.height),
 		.minDepth = 0.0f,
 		.maxDepth = 1.0f
 	};
-	vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+	vkCmdSetViewport(commandBuffer->handle, 0, 1, &viewport);
 
 	VkRect2D scissor
 	{
 		.extent =
 		{
-			.width = swapchain->dimensions.width,
-			.height = swapchain->dimensions.height
+			.width = swapchain->extent.width,
+			.height = swapchain->extent.height
 		}
 	};
-	vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+	vkCmdSetScissor(commandBuffer->handle, 0, 1, &scissor);
 
 	VkDeviceSize offset = 0;
 
-	vkCmdBindVertexBuffers(commandBuffer, 0, 1, &pipelineFeed->vertexSSBO, &offset);
-	vkCmdBindIndexBuffer(commandBuffer, pipelineFeed->indexSSBO, 0, VK_INDEX_TYPE_UINT32);
-	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descrptorSet, 0, nullptr);
+	vkCmdBindVertexBuffers(commandBuffer->handle, 0, 1, &resources->vertexBuffer->handle, &offset);
+	vkCmdBindIndexBuffer(commandBuffer->handle, resources->indexBuffer->handle, 0, VK_INDEX_TYPE_UINT32);
+	vkCmdBindDescriptorSets(commandBuffer->handle, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSet, 0, nullptr);
 
-	vkCmdDrawIndexedIndirect(commandBuffer, pipelineFeed->drawCommandBuffer, 0, static_cast<uint32_t>(pipelineFeed->drawCommands.size()), sizeof(VkDrawIndexedIndirectCommand));
+	vkCmdDrawIndexedIndirect
+	(
+		commandBuffer->handle,
+		resources->drawCommandBuffer->handle, 
+		0, 
+		static_cast<uint32_t>(resources->drawCommandBuffer->size / sizeof(VkDrawIndexedIndirectCommand)), 
+		sizeof(VkDrawIndexedIndirectCommand)
+	);
 
-	vkCmdEndRenderPass(commandBuffer);
+	vkCmdEndRenderPass(commandBuffer->handle);
 
-	VK_CHECK(vkEndCommandBuffer(commandBuffer));
+	commandBuffer->endCommand(false);
 
-	if (perFrame[imageIndex].swapchainReleaseSemaphore == VK_NULL_HANDLE)
+	if (swapchain->frames[index].swapchainReleaseSemaphore == VK_NULL_HANDLE)
 	{
-		VkSemaphoreCreateInfo semaphoreInfo
-		{
-			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO
-		};
-		VK_CHECK(vkCreateSemaphore(*device, &semaphoreInfo, nullptr, &perFrame[imageIndex].swapchainReleaseSemaphore));
+		VkSemaphoreCreateInfo semaphoreInfo{ VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
+		vkCreateSemaphore(device->device, &semaphoreInfo, nullptr, &swapchain->frames[index].swapchainReleaseSemaphore);
 	}
 
 	VkPipelineStageFlags waitStage{ VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
@@ -560,14 +512,14 @@ void Rasterizer::draw(uint32_t imageIndex, vector<PerFrame>& perFrame, VkQueue* 
 	{
 		.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
 		.waitSemaphoreCount = 1,
-		.pWaitSemaphores = &perFrame[imageIndex].swapchainAcquireSemaphore,
+		.pWaitSemaphores = &swapchain->frames[index].swapchainAcquireSemaphore,
 		.pWaitDstStageMask = &waitStage,
 		.commandBufferCount = 1,
-		.pCommandBuffers = &commandBuffer,
+		.pCommandBuffers = &commandBuffer->handle,
 		.signalSemaphoreCount = 1,
-		.pSignalSemaphores = &perFrame[imageIndex].swapchainReleaseSemaphore
+		.pSignalSemaphores = &swapchain->frames[index].swapchainReleaseSemaphore
 	};
-	VK_CHECK(vkQueueSubmit(*queue, 1, &info, perFrame[imageIndex].queueSubmitFence));
+	vkQueueSubmit(device->getQueue(device->queues.graphics), 1, &info, swapchain->frames[index].queueSubmitFence);
 }
 
 VkFormat Rasterizer::findDepthFormat(const vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features)
@@ -575,7 +527,7 @@ VkFormat Rasterizer::findDepthFormat(const vector<VkFormat>& candidates, VkImage
 	for (VkFormat format : candidates)
 	{
 		VkFormatProperties properties;
-		vkGetPhysicalDeviceFormatProperties(*gpu, format, &properties);
+		vkGetPhysicalDeviceFormatProperties(device->gpu, format, &properties);
 		if (tiling == VK_IMAGE_TILING_LINEAR && (properties.linearTilingFeatures & features) == features)
 		{
 			return format;
@@ -589,32 +541,21 @@ VkFormat Rasterizer::findDepthFormat(const vector<VkFormat>& candidates, VkImage
 	throw runtime_error("failed to find supported depth format");
 }
 
-Rasterizer::Rasterizer(VkDevice* device, VkPhysicalDevice* gpu, Allocator* allocator, Swapchain* swapchain, PipelineFeed* pipelineFeed)
-{
-	this->device = device;
-	this->gpu = gpu;
-	this->allocator = allocator;
-	this->swapchain = swapchain;
-	this->pipelineFeed = pipelineFeed;
-	
-	createDescriptorSets(); // must be created before pipeline creation (pipeline layout)
-
-	createRenderPass();
-	createPipeline();
-	createFramebuffers();
-}
-
 Rasterizer::~Rasterizer()
 {
+	for (auto& framebuffer : framebuffers)
+	{
+		vkDestroyFramebuffer(device->device, framebuffer, nullptr);
+	}
+
 	for (auto depthImage : depthImages)
 	{
-		allocator->destroyImage(depthImage);
+		delete depthImage;
 	}
 	depthImages.clear();
 
-	for (auto& depthImageView : depthImageViews)
+	if (renderPass != VK_NULL_HANDLE)
 	{
-		vkDestroyImageView(*device, depthImageView, nullptr);
-		depthImageView = VK_NULL_HANDLE;
+		vkDestroyRenderPass(device->device, renderPass, nullptr);
 	}
 }

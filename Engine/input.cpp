@@ -24,6 +24,10 @@ void Input::cursorCallback(GLFWwindow* window, double xPos, double yPos)
 	input->_yPos = yPos;
 }
 
+Input::Input()
+{
+}
+
 Input::Input(GLFWwindow* window)
 {
 	_xPos = 0, _yPos = 0;

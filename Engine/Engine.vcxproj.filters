@@ -4,14 +4,38 @@
     <ClCompile Include="renderer.cpp">
       <Filter>renderer\src</Filter>
     </ClCompile>
-    <ClCompile Include="allocator.cpp">
-      <Filter>renderer\src</Filter>
+    <ClCompile Include="pipeline.cpp">
+      <Filter>renderer\src\pipeline</Filter>
     </ClCompile>
     <ClCompile Include="rasterizer.cpp">
-      <Filter>renderer\src</Filter>
+      <Filter>renderer\src\pipeline</Filter>
     </ClCompile>
-    <ClCompile Include="pipeline.cpp">
-      <Filter>renderer\src</Filter>
+    <ClCompile Include="raytracer.cpp">
+      <Filter>renderer\src\pipeline</Filter>
+    </ClCompile>
+    <ClCompile Include="unk_buffer_descriptor.cpp">
+      <Filter>unk\src\descriptor</Filter>
+    </ClCompile>
+    <ClCompile Include="unk_descriptor.cpp">
+      <Filter>unk\src\descriptor</Filter>
+    </ClCompile>
+    <ClCompile Include="unk_image_descriptor.cpp">
+      <Filter>unk\src\descriptor</Filter>
+    </ClCompile>
+    <ClCompile Include="unk_buffer.cpp">
+      <Filter>unk\src\resource</Filter>
+    </ClCompile>
+    <ClCompile Include="unk_command_buffer.cpp">
+      <Filter>unk\src\resource</Filter>
+    </ClCompile>
+    <ClCompile Include="unk_image.cpp">
+      <Filter>unk\src\resource</Filter>
+    </ClCompile>
+    <ClCompile Include="unk_device.cpp">
+      <Filter>unk\src</Filter>
+    </ClCompile>
+    <ClCompile Include="unk_swapchain.cpp">
+      <Filter>unk\src</Filter>
     </ClCompile>
     <ClCompile Include="controller.cpp">
       <Filter>engine\src</Filter>
@@ -28,25 +52,55 @@
     <ClCompile Include="scene.cpp">
       <Filter>engine\src</Filter>
     </ClCompile>
-    <ClCompile Include="raytracer.cpp">
-      <Filter>renderer\src</Filter>
+    <ClCompile Include="unk_blas.cpp">
+      <Filter>unk\src\resource</Filter>
+    </ClCompile>
+    <ClCompile Include="unk_tlas.cpp">
+      <Filter>unk\src\resource</Filter>
+    </ClCompile>
+    <ClCompile Include="unk_as_descriptor.cpp">
+      <Filter>unk\src\descriptor</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="renderer.h">
       <Filter>renderer\include</Filter>
     </ClInclude>
-    <ClInclude Include="allocator.h">
-      <Filter>renderer\include</Filter>
-    </ClInclude>
     <ClInclude Include="structs.h">
       <Filter>renderer\include</Filter>
     </ClInclude>
     <ClInclude Include="pipeline.h">
-      <Filter>renderer\include</Filter>
+      <Filter>renderer\include\pipeline</Filter>
     </ClInclude>
     <ClInclude Include="rasterizer.h">
-      <Filter>renderer\include</Filter>
+      <Filter>renderer\include\pipeline</Filter>
+    </ClInclude>
+    <ClInclude Include="raytracer.h">
+      <Filter>renderer\include\pipeline</Filter>
+    </ClInclude>
+    <ClInclude Include="unk_buffer_descriptor.h">
+      <Filter>unk\include\descriptor</Filter>
+    </ClInclude>
+    <ClInclude Include="unk_descriptor.h">
+      <Filter>unk\include\descriptor</Filter>
+    </ClInclude>
+    <ClInclude Include="unk_image_descriptor.h">
+      <Filter>unk\include\descriptor</Filter>
+    </ClInclude>
+    <ClInclude Include="unk_buffer.h">
+      <Filter>unk\include\resource</Filter>
+    </ClInclude>
+    <ClInclude Include="unk_command_buffer.h">
+      <Filter>unk\include\resource</Filter>
+    </ClInclude>
+    <ClInclude Include="unk_image.h">
+      <Filter>unk\include\resource</Filter>
+    </ClInclude>
+    <ClInclude Include="unk_device.h">
+      <Filter>unk\include</Filter>
+    </ClInclude>
+    <ClInclude Include="unk_swapchain.h">
+      <Filter>unk\include</Filter>
     </ClInclude>
     <ClInclude Include="controller.h">
       <Filter>engine\include</Filter>
@@ -63,8 +117,14 @@
     <ClInclude Include="utils.h">
       <Filter>engine\include</Filter>
     </ClInclude>
-    <ClInclude Include="raytracer.h">
-      <Filter>renderer\include</Filter>
+    <ClInclude Include="unk_blas.h">
+      <Filter>unk\include\resource</Filter>
+    </ClInclude>
+    <ClInclude Include="unk_tlas.h">
+      <Filter>unk\include\resource</Filter>
+    </ClInclude>
+    <ClInclude Include="unk_as_descriptor.h">
+      <Filter>unk\include\descriptor</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -77,52 +137,79 @@
     <Filter Include="engine">
       <UniqueIdentifier>{20cce306-84fd-46a1-9fd6-ee674e0f762a}</UniqueIdentifier>
     </Filter>
-    <Filter Include="engine\include">
-      <UniqueIdentifier>{544e376f-07c8-41c2-9a1d-bb151474a09c}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="engine\src">
-      <UniqueIdentifier>{c4f2bb48-9c59-4cab-9783-73b4e7c4a9f2}</UniqueIdentifier>
-    </Filter>
     <Filter Include="renderer">
       <UniqueIdentifier>{4d9bd546-8bd9-4dbc-97cf-f216fe4b5832}</UniqueIdentifier>
     </Filter>
-    <Filter Include="renderer\include">
-      <UniqueIdentifier>{a41de23a-3119-4bb5-bb6b-1b182093a8df}</UniqueIdentifier>
+    <Filter Include="unk">
+      <UniqueIdentifier>{7915a274-1270-454b-8b46-2fb35a9b4f1a}</UniqueIdentifier>
     </Filter>
     <Filter Include="renderer\src">
-      <UniqueIdentifier>{5279fb65-1825-4208-acee-3131eef1d128}</UniqueIdentifier>
+      <UniqueIdentifier>{dbd571ec-f6af-4205-8880-9285aac99ece}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="renderer\include">
+      <UniqueIdentifier>{24149b4f-f0fc-48ed-9d68-688530e05ec3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="renderer\include\pipeline">
+      <UniqueIdentifier>{bbe53365-b57a-44c3-9b95-637c1304d0da}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="renderer\src\pipeline">
+      <UniqueIdentifier>{20b95146-badc-4f5d-b227-9a27e0222b15}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="unk\include">
+      <UniqueIdentifier>{e1cc4423-15c9-43d8-9251-1fea0a183faa}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="unk\src">
+      <UniqueIdentifier>{06f8d52c-add9-46b2-a5e5-55cc2fa17570}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="unk\src\descriptor">
+      <UniqueIdentifier>{f8946739-3b8d-4b88-9071-415fc8a44fb0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="unk\src\resource">
+      <UniqueIdentifier>{89349f80-a03f-4487-b820-8c4d08eb5af8}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="unk\include\descriptor">
+      <UniqueIdentifier>{b7d0890b-d967-48da-9b92-9c2920883325}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="unk\include\resource">
+      <UniqueIdentifier>{e24dd074-2919-4aa1-a3ea-9752e2ccf14c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="shaders\rasterizer">
+      <UniqueIdentifier>{08b835d7-a31e-48e2-b6ec-81f2e590f308}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="shaders\raytracer">
+      <UniqueIdentifier>{334b0c53-017b-4ea5-9741-d8ea9b316ce9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="engine\src">
+      <UniqueIdentifier>{fd14012b-0ded-4428-aeff-8eaf4f11100c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="engine\include">
+      <UniqueIdentifier>{82a29332-d046-4992-967d-395e178b4f2d}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
     <None Include="shaders\compile.bat">
       <Filter>shaders</Filter>
     </None>
-    <None Include="shaders\frag.spv">
-      <Filter>shaders</Filter>
-    </None>
-    <None Include="shaders\shader.frag">
-      <Filter>shaders</Filter>
-    </None>
-    <None Include="shaders\shader.vert">
-      <Filter>shaders</Filter>
-    </None>
-    <None Include="shaders\vert.spv">
-      <Filter>shaders</Filter>
-    </None>
-    <None Include="shaders\hit.rchit">
-      <Filter>shaders</Filter>
-    </None>
-    <None Include="shaders\miss.rmiss">
-      <Filter>shaders</Filter>
-    </None>
-    <None Include="shaders\raygen.rgen">
-      <Filter>shaders</Filter>
-    </None>
     <None Include="shaders\shadow_hit.rahit">
-      <Filter>shaders</Filter>
+      <Filter>shaders\raytracer</Filter>
     </None>
     <None Include="shaders\shadow_miss.rmiss">
-      <Filter>shaders</Filter>
+      <Filter>shaders\raytracer</Filter>
+    </None>
+    <None Include="shaders\shader.frag">
+      <Filter>shaders\rasterizer</Filter>
+    </None>
+    <None Include="shaders\shader.vert">
+      <Filter>shaders\rasterizer</Filter>
+    </None>
+    <None Include="shaders\hit.rchit">
+      <Filter>shaders\raytracer</Filter>
+    </None>
+    <None Include="shaders\miss.rmiss">
+      <Filter>shaders\raytracer</Filter>
+    </None>
+    <None Include="shaders\raygen.rgen">
+      <Filter>shaders\raytracer</Filter>
     </None>
   </ItemGroup>
 </Project>

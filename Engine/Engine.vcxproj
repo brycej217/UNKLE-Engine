@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -139,7 +139,6 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="allocator.cpp" />
     <ClCompile Include="controller.cpp" />
     <ClCompile Include="engine.cpp" />
     <ClCompile Include="input.cpp" />
@@ -149,9 +148,19 @@
     <ClCompile Include="raytracer.cpp" />
     <ClCompile Include="renderer.cpp" />
     <ClCompile Include="scene.cpp" />
+    <ClCompile Include="unk_as_descriptor.cpp" />
+    <ClCompile Include="unk_blas.cpp" />
+    <ClCompile Include="unk_buffer.cpp" />
+    <ClCompile Include="unk_buffer_descriptor.cpp" />
+    <ClCompile Include="unk_command_buffer.cpp" />
+    <ClCompile Include="unk_image_descriptor.cpp" />
+    <ClCompile Include="unk_descriptor.cpp" />
+    <ClCompile Include="unk_device.cpp" />
+    <ClCompile Include="unk_image.cpp" />
+    <ClCompile Include="unk_swapchain.cpp" />
+    <ClCompile Include="unk_tlas.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="allocator.h" />
     <ClInclude Include="controller.h" />
     <ClInclude Include="engine.h" />
     <ClInclude Include="input.h" />
@@ -161,11 +170,21 @@
     <ClInclude Include="structs.h" />
     <ClInclude Include="rasterizer.h" />
     <ClInclude Include="renderer.h" />
+    <ClInclude Include="unk_as_descriptor.h" />
+    <ClInclude Include="unk_blas.h" />
+    <ClInclude Include="unk_buffer.h" />
+    <ClInclude Include="unk_buffer_descriptor.h" />
+    <ClInclude Include="unk_command_buffer.h" />
+    <ClInclude Include="unk_image_descriptor.h" />
+    <ClInclude Include="unk_descriptor.h" />
+    <ClInclude Include="unk_device.h" />
+    <ClInclude Include="unk_image.h" />
+    <ClInclude Include="unk_swapchain.h" />
+    <ClInclude Include="unk_tlas.h" />
     <ClInclude Include="utils.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="shaders\compile.bat" />
-    <None Include="shaders\frag.spv" />
     <None Include="shaders\hit.rchit" />
     <None Include="shaders\miss.rmiss" />
     <None Include="shaders\raygen.rgen" />
@@ -173,7 +192,6 @@
     <None Include="shaders\shader.vert" />
     <None Include="shaders\shadow_hit.rahit" />
     <None Include="shaders\shadow_miss.rmiss" />
-    <None Include="shaders\vert.spv" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

@@ -19,12 +19,12 @@ public:
 	void run();
 
 private:
-	GLFWwindow* _window = nullptr;
-	Renderer _renderer;
-	SceneManager _sceneManager;
-	Camera _camera;
-	Input _input;
-	Controller _controller;
+	GLFWwindow* window = nullptr;
+	Renderer* renderer;
+	SceneManager* sceneManager;
+	Camera camera;
+	Input* input;
+	Controller controller;
 
 	GLFWwindow* initWindow(uint32_t width, uint32_t height, const char* name);
 

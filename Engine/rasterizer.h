@@ -4,12 +4,14 @@
 class Rasterizer : public Pipeline
 {
 public:
-	vector<VkImage> depthImages;
-	vector<VkImageView> depthImageViews;
+	VkRenderPass renderPass{ VK_NULL_HANDLE };
+
+	vector<UnkImage*> depthImages;
+	vector<VkFramebuffer> framebuffers;
 
 	Rasterizer() = default;
 
-	Rasterizer(VkDevice* device, VkPhysicalDevice* gpu, Allocator* allocator, Swapchain* swapchain, PipelineFeed* pipelineFeed);
+	Rasterizer(UnkDevice* device, UnkSwapchain* swapchain, DeviceResources* resources);
 
 	~Rasterizer() override;
 
@@ -23,7 +25,7 @@ public:
 
 	void handleResize();
 
-	void draw(uint32_t imageIndex, vector<PerFrame>& perFrame, VkQueue* queue);
+	void draw(uint32_t imageIndex);
 
 	VkFormat findDepthFormat(const vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features);
 };

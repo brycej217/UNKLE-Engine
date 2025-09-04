@@ -1,6 +1,8 @@
 #pragma once
 
-#include "allocator.h"
+#include "unk_device.h"
+#include "unk_swapchain.h"
+
 #include "rasterizer.h"
 #include "raytracer.h"
 #include "structs.h"
@@ -25,65 +27,39 @@ public:
 
 	void render(Camera camera, float deltaTime);
 
-	
 	VkInstance instance = VK_NULL_HANDLE;
 	VkDebugUtilsMessengerEXT debugMessenger = VK_NULL_HANDLE;
 
 	GLFWwindow* window = nullptr;
 	VkSurfaceKHR surface = VK_NULL_HANDLE;
 
-	VkPhysicalDevice gpu = VK_NULL_HANDLE;
-	VkDevice device = VK_NULL_HANDLE;
-
-	Queues queues;
+	UnkDevice* device;
+	UnkSwapchain* swapchain;
 
 	vector<Pipeline*> pipelines;
 	uint32_t currPipeline;
-	Allocator* allocator = nullptr;
-
-	// swapchain data
-	Swapchain swapchain;
-
-	vector<PerFrame> perFrame;
 	
-	// draw call resources
-	PipelineFeed pipelineFeed;
+	DeviceResources deviceResources;
 
 	// initialization
 
 	void createInstance();
 
+	VkPhysicalDevice selectPhysicalDevice(vector<const char*> requiredExtensions);
+
 	void createDevice();
 
-	void createPerFrame(PerFrame& perFrame);
-
-	void destroyPerFrame(PerFrame& perFrame);
-
-	void createSwapchain();
-
 	void switchPipeline();
-
-	// utility
-
-	void resizeSwapchain();
 
 	// pipeline 
 
 	void createPipeline();
 
-	void createPipelineFeed();
+	void createDeviceResources();
 
 	void updateInstances(Camera camera, float deltaTime);
 
-	// draw feed resource creation
+	void createVertexBuffers(vector<Vertex>& vertices, vector<uint32_t>& indices);
 
-	void createVertexBuffer(vector<Vertex>& vertices, vector<uint32_t>& indices, VkBuffer& vertexBuffer, VkBuffer& indexBuffer);
-
-	void createTexture(void* data, uint32_t imageSize, uint32_t texWidth, uint32_t texHeight);
-
-	// rendering
-
-	VkResult acquireImage(uint32_t* imageIndex);
-
-	VkResult presentImage(uint32_t imageIndex);
+	void createTexture(void* data, uint32_t width, uint32_t height);
 };

@@ -7,63 +7,12 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <glm/gtc/matrix_transform.hpp>
-#include "vk_mem_alloc.h"
+
+#include "unk_buffer.h"
+#include "unk_image.h"
 
 using namespace glm;
 using namespace std;
-
-struct PerFrame
-{
-	VkImage swapchainImage = VK_NULL_HANDLE;
-	VkFence queueSubmitFence = VK_NULL_HANDLE;
-	VkSemaphore swapchainAcquireSemaphore = VK_NULL_HANDLE;
-	VkSemaphore swapchainReleaseSemaphore = VK_NULL_HANDLE;
-
-	VkCommandPool commandPool = VK_NULL_HANDLE;
-	VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
-};
-
-
-struct Queues
-{
-	VkQueue graphicsQueue = VK_NULL_HANDLE;
-	VkQueue presentQueue = VK_NULL_HANDLE;
-	VkQueue transferQueue = VK_NULL_HANDLE;
-
-	uint32_t graphicsIndex = UINT32_MAX;
-	uint32_t presentIndex = UINT32_MAX;
-	uint32_t transferIndex = UINT32_MAX;
-
-	set<uint32_t> uniqueIndices = {};
-};
-
-struct SwapchainDimensions
-{
-	uint32_t width = 0;
-	uint32_t height = 0;
-
-	VkFormat format = VK_FORMAT_UNDEFINED;
-};
-
-struct Swapchain
-{
-	SwapchainDimensions dimensions;
-	VkSwapchainKHR swapchain = VK_NULL_HANDLE;
-	vector<VkImageView> imageViews;
-
-	void cleanup(VkDevice* device)
-	{
-		for (auto& swapchainImageView : imageViews)
-		{
-			vkDestroyImageView(*device, swapchainImageView, nullptr);
-		}
-
-		if (swapchain != VK_NULL_HANDLE)
-		{
-			vkDestroySwapchainKHR(*device, swapchain, nullptr);
-		}
-	}
-};
 
 struct Instance
 {
@@ -113,50 +62,60 @@ struct MVP
 	mat4 proj;
 };
 
-struct PipelineFeed
+struct Vertex
+{
+	vec3 position; float _pad0;
+	vec3 normal; float _pad1;
+	vec2 texCoord; vec2 _pad2;
+
+	bool operator==(const Vertex& other) const
+	{
+		return position == other.position && normal == other.normal && texCoord == other.texCoord;
+	}
+};
+
+struct DeviceResources
 {
 	vector<Mesh> meshes;
 
-	vector<VkDrawIndexedIndirectCommand> drawCommands;
-	VkBuffer drawCommandBuffer;
+	UnkBuffer* vertexBuffer;
 
-	VkBuffer vertexSSBO;
-	VkDeviceSize vertexBufferSize;
-
-	VkBuffer indexSSBO;
-	VkDeviceSize indexBufferSize;
+	UnkBuffer* indexBuffer;
 
 	vector<Instance> instances;
-	VkBuffer instanceSSBO;
-	VmaAllocationInfo instanceInfo;
-
-	VkBuffer cameraBuffer;
-	VmaAllocationInfo cameraInfo;
+	UnkBuffer* instanceBuffer;
 
 	vector<MVP> transforms;
-	VkBuffer transformSSBO;
-	VkBuffer transformStagingBuffer;
-	VmaAllocationInfo transformInfo;
-
-	vector<VkImage> textureImages;
-	vector<VkImageView> textureImageViews;
-	VkSampler textureImageSampler = VK_NULL_HANDLE;
+	UnkBuffer* transformBuffer;
 
 	vector<Light> lights;
-	VkBuffer lightSSBO;
-	VkBuffer lightStagingBuffer;
-	VmaAllocationInfo lightInfo;
+	UnkBuffer* lightBuffer;
 
-	void cleanup(VkDevice* device)
+	UnkBuffer* cameraBuffer;
+
+	VkSampler sampler;
+	vector<UnkImage*> textureImages;
+
+	UnkBuffer* drawCommandBuffer;
+
+	void destroy(UnkDevice* device)
 	{
-		for (auto& textureImageView : textureImageViews)
+		delete vertexBuffer;
+		delete indexBuffer;
+		delete instanceBuffer;
+		delete transformBuffer;
+		delete lightBuffer;
+		delete cameraBuffer;
+		delete drawCommandBuffer;
+
+		if (sampler != VK_NULL_HANDLE)
 		{
-			vkDestroyImageView(*device, textureImageView, nullptr);
+			vkDestroySampler(device->device, sampler, nullptr);
 		}
 
-		if (textureImageSampler != VK_NULL_HANDLE)
+		for (auto& image : textureImages)
 		{
-			vkDestroySampler(*device, textureImageSampler, nullptr);
+			delete image;
 		}
 	}
 };
@@ -194,16 +153,4 @@ struct Camera
 	vec3 getForward() const { return transform.getForward(); }
 	vec3 getUp() const { return transform.getUp(); }
 	vec3 getRight() const { return transform.getRight(); }
-};
-
-struct Vertex
-{
-	vec3 position; float _pad0;
-	vec3 normal; float _pad1;
-	vec2 texCoord; vec2 _pad2;
-
-	bool operator==(const Vertex& other) const
-	{
-		return position == other.position && normal == other.normal && texCoord == other.texCoord;
-	}
 };

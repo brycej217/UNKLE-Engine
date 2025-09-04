@@ -27,7 +27,7 @@ GLFWwindow* Engine::initWindow(uint32_t width, uint32_t height, const char* name
 float Engine::calculateDeltaTime(auto* previousTime)
 {
 	auto currentTime = high_resolution_clock::now();
-	float deltaTime = duration<float, seconds::period>(currentTime - *previousTime).count();
+float deltaTime = duration<float, seconds::period>(currentTime - *previousTime).count();
 	*previousTime = currentTime;
 
 	return deltaTime;
@@ -37,31 +37,32 @@ void Engine::run()
 {
 	auto previousTime = high_resolution_clock::now();
 
-	while (!glfwWindowShouldClose(_window))
+	while (!glfwWindowShouldClose(window))
 	{
 		glfwPollEvents();
 
 		float deltaTime = calculateDeltaTime(&previousTime);
 
-		_controller.update(&_input, &_camera, deltaTime);
+		controller.update(input, &camera, deltaTime);
 
-		if (_input.getInputBuffer()[static_cast<int>(Key::G)])
+		if (input->getInputBuffer()[static_cast<int>(Key::G)])
 		{
-			_renderer.switchPipeline();
-			_input.getInputBuffer()[static_cast<int>(Key::G)] = false;
+			renderer->switchPipeline();
+			input->getInputBuffer()[static_cast<int>(Key::G)] = false;
 		}
 
-		_renderer.render(_camera, deltaTime);
+		renderer->render(camera, deltaTime);
 	}
 }
 
 Engine::Engine()
-	: _window(initWindow(WIDTH, HEIGHT, "Engine"))
-	, _renderer(_window, WIDTH, HEIGHT)
-	, _sceneManager(&_renderer)
-	, _input(_window)
 {
-	_camera =
+	this->window = initWindow(WIDTH, HEIGHT, "Engine");
+	this->renderer = new Renderer(window, WIDTH, HEIGHT);
+	this->sceneManager = new SceneManager(this->renderer);
+	this->input = new Input(this->window);
+
+	camera =
 	{
 		.transform =
 		{
@@ -69,14 +70,14 @@ Engine::Engine()
 			.rotation = quat(),
 		},
 	};
-	//_camera.transform.rotation = angleAxis(radians(-90.0f), _camera.getRight());
 
-	_sceneManager.loadScene("scenes/scene.fbx");
-	_renderer.createPipeline();
+	sceneManager->loadScene("scenes/scene.fbx");
+
+	renderer->createPipeline();
 }
 
 Engine::~Engine()
 {
-	glfwDestroyWindow(_window);
+	glfwDestroyWindow(window);
 	glfwTerminate();
 }

@@ -38,7 +38,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
 {
 	if (messageSeverity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
 	{
-		cerr << "validation layer: " << pCallbackData->pMessage << endl;
+		cerr << "validation layer: " << pCallbackData->pMessage << "\n" << endl;
 	}
 	return VK_FALSE;
 }
@@ -52,6 +52,19 @@ namespace std {
 				(hash<glm::vec2>()(vertex.texCoord) << 1);
 		}
 	};
+}
+
+Renderer::Renderer(GLFWwindow* window, uint32_t width, uint32_t height)
+{
+	this->window = window;
+
+	createInstance();
+
+	VK_CHECK(glfwCreateWindowSurface(instance, this->window, nullptr, &surface));
+
+	createDevice();
+
+	this->swapchain = new UnkSwapchain(device, &surface, window);
 }
 
 void Renderer::createInstance()
@@ -136,160 +149,213 @@ void Renderer::createInstance()
 #endif
 }
 
+VkPhysicalDevice Renderer::selectPhysicalDevice(vector<const char*> requiredExtensions)
+{
+	// get available gpus
+	uint32_t gpuCount;
+	vector<VkPhysicalDevice> gpus;
+	vkEnumeratePhysicalDevices(instance, &gpuCount, nullptr);
+	assert(gpuCount > 0);
+	gpus.resize(gpuCount);
+	vkEnumeratePhysicalDevices(instance, &gpuCount, gpus.data());
+
+
+	// find suitable gpu
+	for (const auto& gpu : gpus)
+	{
+		// check gpu queue family support
+		bool graphics = false, compute = false, transfer = false;
+
+		uint32_t queueFamilyCount;
+		vector<VkQueueFamilyProperties> queueFamilyProperties;
+		vkGetPhysicalDeviceQueueFamilyProperties(gpu, &queueFamilyCount, nullptr);
+		assert(queueFamilyCount > 0);
+		queueFamilyProperties.resize(queueFamilyCount);
+		vkGetPhysicalDeviceQueueFamilyProperties(gpu, &queueFamilyCount, queueFamilyProperties.data());
+
+		for (uint32_t i = 0; i < static_cast<uint32_t>(queueFamilyProperties.size()); i++)
+		{
+			if ((queueFamilyProperties[i].queueFlags & VK_QUEUE_COMPUTE_BIT) && ((queueFamilyProperties[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) == 0))
+			{
+				compute = true;
+			}
+			else if ((queueFamilyProperties[i].queueFlags & VK_QUEUE_TRANSFER_BIT) && ((queueFamilyProperties[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) == 0) && ((queueFamilyProperties[i].queueFlags & VK_QUEUE_COMPUTE_BIT) == 0))
+			{
+				transfer = true;
+			}
+			else if (!graphics && queueFamilyProperties[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)
+			{
+				graphics = true;
+			}
+
+			if (graphics && compute && transfer)
+			{
+				break;
+			}
+		}
+
+		// check gpu extension availability
+		uint32_t extensionCount;
+		vector<VkExtensionProperties> extensionProperties;
+		vkEnumerateDeviceExtensionProperties(gpu, nullptr, &extensionCount, nullptr);
+		assert(extensionCount > 0);
+		extensionProperties.resize(extensionCount);
+		vkEnumerateDeviceExtensionProperties(gpu, nullptr, &extensionCount, extensionProperties.data());
+
+		// query if required extension capabilities are met
+		set<string> requiredSet;
+
+		for (auto requiredExtension : requiredSet)
+		{
+			requiredSet.insert(requiredExtension);
+			for (auto& availableExtension : extensionProperties)
+			{
+				if (strcmp(availableExtension.extensionName, requiredExtension.c_str()) == 0)
+				{
+					requiredSet.erase(requiredExtension);
+					break;
+				}
+			}
+		}
+
+		if (!requiredSet.empty()) continue;
+
+		// end of pNext chain
+		VkPhysicalDeviceRayTracingValidationFeaturesNV validationProbe
+		{
+			.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_VALIDATION_FEATURES_NV,
+		};
+
+		// accelerationStructure -> validation
+		VkPhysicalDeviceAccelerationStructureFeaturesKHR accelerationStructureProbe
+		{
+			.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR,
+			.pNext = &validationProbe,
+		};
+
+		// rayTracingPipeline -> accelerationStructure
+		VkPhysicalDeviceRayTracingPipelineFeaturesKHR rayTracingPipelineProbe
+		{
+			.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR,
+			.pNext = &accelerationStructureProbe,
+		};
+
+		// bufferDeviceAddress -> rayTracingPipeline
+		VkPhysicalDeviceBufferDeviceAddressFeatures bufferDeviceAddressProbe
+		{
+			.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES,
+			.pNext = &rayTracingPipelineProbe,
+		};
+
+		// descriptorIndexing -> bufferDeviceAddress
+		VkPhysicalDeviceDescriptorIndexingFeatures descriptorIndexingProbe
+		{
+			.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES,
+			.pNext = &bufferDeviceAddressProbe,
+		};
+
+		// features11 -> descriptorIndexing
+		VkPhysicalDeviceVulkan11Features probe11
+		{
+			.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
+			.pNext = &descriptorIndexingProbe,
+		};
+
+		// features2 -> features11
+		VkPhysicalDeviceFeatures2 probe2
+		{
+			.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
+			.pNext = &probe11,
+		};
+
+		vkGetPhysicalDeviceFeatures2(gpu, &probe2);
+
+		bool valid =
+			probe2.features.samplerAnisotropy &&
+			probe2.features.multiDrawIndirect &&
+			probe2.features.drawIndirectFirstInstance &&
+			probe11.shaderDrawParameters &&
+			descriptorIndexingProbe.runtimeDescriptorArray &&
+			descriptorIndexingProbe.descriptorBindingPartiallyBound &&
+			descriptorIndexingProbe.shaderSampledImageArrayNonUniformIndexing &&
+			bufferDeviceAddressProbe.bufferDeviceAddress &&
+			rayTracingPipelineProbe.rayTracingPipeline &&
+			accelerationStructureProbe.accelerationStructure;
+
+		if (!valid) continue;
+
+		return gpu;
+	}
+}
+
 void Renderer::createDevice()
 {
-	auto gpus = VK_ENUMERATE<VkPhysicalDevice>(vkEnumeratePhysicalDevices, instance);
-
-	if (gpus.empty())
+	vector<const char*> enabledExtensions
 	{
-		throw runtime_error("No physical device found");
-	}
-
-	vector<const char*> requiredDeviceExtensions
-	{ 
-		VK_KHR_SWAPCHAIN_EXTENSION_NAME, 
+		VK_KHR_SWAPCHAIN_EXTENSION_NAME,
 		VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME,
 		VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME,
 		VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
 		VK_KHR_SPIRV_1_4_EXTENSION_NAME,
 		VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME,
 		VK_KHR_PIPELINE_LIBRARY_EXTENSION_NAME,
-		VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME, 
-		VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME
+		VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
+		VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME,
+		VK_NV_RAY_TRACING_VALIDATION_EXTENSION_NAME
 	};
 
-	// find suitable gpu
-	for (const auto& gpu : gpus)
+	VkPhysicalDevice physicalDevice = selectPhysicalDevice(enabledExtensions);
+
+	// end of pNext chain
+	VkPhysicalDeviceRayTracingValidationFeaturesNV validation
 	{
-		// check gpu queue family support
-		bool foundGraphics = false, foundPresent = false, foundTransfer = false;
-		auto availableQueueFamilies = VK_ENUMERATE<VkQueueFamilyProperties>(vkGetPhysicalDeviceQueueFamilyProperties, gpu);
-		for (uint32_t i = 0; i < static_cast<uint32_t>(availableQueueFamilies.size()); i++)
-		{
-			if (!foundGraphics && availableQueueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)
-			{
-				queues.graphicsIndex = i;
-				foundGraphics = true;
-			}
-			else if (!foundTransfer && availableQueueFamilies[i].queueFlags & VK_QUEUE_TRANSFER_BIT)
-			{
-				queues.transferIndex = i;
-				foundTransfer = true;
-			}
+		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_VALIDATION_FEATURES_NV,
+		.pNext = nullptr,
+		.rayTracingValidation = VK_TRUE
+	};
 
-			if (!foundPresent)
-			{
-				VkBool32 presentSupport = false;
-				vkGetPhysicalDeviceSurfaceSupportKHR(gpu, i, surface, &presentSupport);
-
-				if (presentSupport)
-				{
-					queues.presentIndex = i;
-					foundPresent = true;
-				}
-			}
-
-			if (foundGraphics && foundPresent && foundTransfer)
-			{
-				break;
-			}
-		}
-
-		if (queues.graphicsIndex != UINT32_MAX)
-		{
-			queues.uniqueIndices.insert(queues.graphicsIndex);
-		}
-		if (queues.presentIndex != UINT32_MAX)
-		{
-			queues.uniqueIndices.insert(queues.presentIndex);
-		}
-		if (queues.transferIndex != UINT32_MAX)
-		{
-			queues.uniqueIndices.insert(queues.transferIndex);
-		}
-
-		// check gpu extension availability
-		auto availableDeviceExtensions = VK_ENUMERATE<VkExtensionProperties>(vkEnumerateDeviceExtensionProperties, gpu, nullptr);
-		if (!VK_VALIDATE(requiredDeviceExtensions, availableDeviceExtensions, getExtensionName)) continue;
-
-		VkPhysicalDeviceFeatures supportedFeatures;
-		vkGetPhysicalDeviceFeatures(gpu, &supportedFeatures);
-
-		if (!supportedFeatures.samplerAnisotropy) continue;
-		if (!supportedFeatures.multiDrawIndirect) continue;
-
-		// ray tracing support query
-		VkPhysicalDeviceRayTracingPipelineFeaturesKHR rayTracingFeatures
-		{
-			.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR,
-		};
-		VkPhysicalDeviceAccelerationStructureFeaturesKHR accelerationFeatures
-		{
-			.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR,
-			.pNext = &rayTracingFeatures,
-		};
-		VkPhysicalDeviceFeatures2 supportedFeatures2
-		{
-			.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
-			.pNext = &accelerationFeatures
-		};
-		vkGetPhysicalDeviceFeatures2(gpu, &supportedFeatures2);
-
-		if (!accelerationFeatures.accelerationStructure) continue;
-		if (!rayTracingFeatures.rayTracingPipeline) continue;
-
-		this->gpu = gpu;
-	}
-
-	vector<VkDeviceQueueCreateInfo> queueInfos;
-
-	const float queuePriority = 1.0f;
-	for (uint32_t queueFamilyIndex : queues.uniqueIndices)
-	{
-		VkDeviceQueueCreateInfo queueInfo
-		{
-			.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-			.queueFamilyIndex = queueFamilyIndex,
-			.queueCount = 1,
-			.pQueuePriorities = &queuePriority
-		};
-
-		queueInfos.push_back(queueInfo);
-	}
-
-	VkPhysicalDeviceAccelerationStructureFeaturesKHR accelFeat
+	// accelerationStructure -> validation
+	VkPhysicalDeviceAccelerationStructureFeaturesKHR accelerationStructureFeatures
 	{
 		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR,
+		.pNext = &validation,
 		.accelerationStructure = VK_TRUE
-
 	};
-	VkPhysicalDeviceRayTracingPipelineFeaturesKHR rtFeat{
+
+	// rayTracingPipeline -> accelerationStructure
+	VkPhysicalDeviceRayTracingPipelineFeaturesKHR rayTracingPipelineFeatures{
 		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR,
-		.pNext = &accelFeat,
+		.pNext = &accelerationStructureFeatures,
 		.rayTracingPipeline = VK_TRUE
 	};
-	VkPhysicalDeviceBufferDeviceAddressFeatures bdaFeat{
+
+	// bufferDeviceAddress -> rayTracingPipeline
+	VkPhysicalDeviceBufferDeviceAddressFeatures bufferDeviceAddressFeatures{
 		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES,
-		.pNext = &rtFeat,
+		.pNext = &rayTracingPipelineFeatures,
 		.bufferDeviceAddress = VK_TRUE,
 	};
-	bdaFeat.pNext = &rtFeat;
 
-	VkPhysicalDeviceDescriptorIndexingFeatures indexing
+	// descriptorIndexing -> bufferDeviceAddress
+	VkPhysicalDeviceDescriptorIndexingFeatures descriptorIndexingFeatures
 	{
 		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES,
-		.pNext = &bdaFeat,
+		.pNext = &bufferDeviceAddressFeatures,
 		.shaderSampledImageArrayNonUniformIndexing = VK_TRUE,
 		.descriptorBindingPartiallyBound = VK_TRUE,
 		.descriptorBindingVariableDescriptorCount = VK_TRUE,
 		.runtimeDescriptorArray = VK_TRUE,
 	};
+
+	// features11 -> descriptorIndexing
 	VkPhysicalDeviceVulkan11Features features11
 	{
 		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
-		.pNext = &indexing,
+		.pNext = &descriptorIndexingFeatures,
 		.shaderDrawParameters = VK_TRUE
 	};
+
+	// features2 -> features11
 	VkPhysicalDeviceFeatures2 features2
 	{
 		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
@@ -302,264 +368,16 @@ void Renderer::createDevice()
 		}
 	};
 
-	VkDeviceCreateInfo deviceInfo
-	{
-		.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-		.pNext = &features2,
-		.queueCreateInfoCount = static_cast<uint32_t>(queueInfos.size()),
-		.pQueueCreateInfos = queueInfos.data(),
-		.enabledExtensionCount = static_cast<uint32_t>(requiredDeviceExtensions.size()),
-		.ppEnabledExtensionNames = requiredDeviceExtensions.data(),
-		.pEnabledFeatures = nullptr
-	};
-
-	VK_CHECK(vkCreateDevice(gpu, &deviceInfo, nullptr, &device));
-
-	vkGetDeviceQueue(device, queues.graphicsIndex, 0, &queues.graphicsQueue);
-	vkGetDeviceQueue(device, queues.presentIndex, 0, &queues.presentQueue);
-	vkGetDeviceQueue(device, queues.transferIndex, 0, &queues.transferQueue);
+	VkPhysicalDeviceFeatures deviceFeatures{};
+	device = new UnkDevice
+	(
+		instance,
+		physicalDevice, 
+		deviceFeatures,
+		enabledExtensions, 
+		&features2
+	);
 }
-
-void Renderer::createSwapchain()
-{
-	VkSurfaceCapabilitiesKHR surfaceProperties;
-	VK_CHECK(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(gpu, surface, &surfaceProperties));
-
-	// find best surface format
-	VkSurfaceFormatKHR surfaceFormat;
-	auto availableSurfaceFormats = VK_ENUMERATE<VkSurfaceFormatKHR>(vkGetPhysicalDeviceSurfaceFormatsKHR, gpu, surface);
-	surfaceFormat = availableSurfaceFormats[0];
-	for (const auto& availableSurfaceFormat : availableSurfaceFormats)
-	{
-		if (availableSurfaceFormat.format == VK_FORMAT_B8G8R8A8_SRGB && availableSurfaceFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
-		{
-			surfaceFormat = availableSurfaceFormat;
-		}
-	}
-	swapchain.dimensions.format = surfaceFormat.format;
-
-	// find best present mode (vsync)
-	VkPresentModeKHR presentMode;
-	presentMode = VK_PRESENT_MODE_FIFO_KHR;
-	auto availablePresentModes = VK_ENUMERATE<VkPresentModeKHR>(vkGetPhysicalDeviceSurfacePresentModesKHR, gpu, surface);
-	for (const auto& availablePresentMode : availablePresentModes)
-	{
-		if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR)
-		{
-			presentMode = availablePresentMode;
-		}
-	}
-
-	// find best swapchain image dimensions
-	VkExtent2D swapchainExtent{};
-	if (surfaceProperties.currentExtent.width == 0xFFFFFFFF)
-	{
-		int width, height;
-		glfwGetFramebufferSize(window, &width, &height);
-		swapchainExtent.width = std::clamp(static_cast<uint32_t>(width), surfaceProperties.minImageExtent.width, surfaceProperties.maxImageExtent.width);
-		swapchainExtent.height = std::clamp(static_cast<uint32_t>(height), surfaceProperties.minImageExtent.height, surfaceProperties.maxImageExtent.height);
-	}
-	else
-	{
-		swapchainExtent = surfaceProperties.currentExtent;
-	}
-
-	// find best swapchain image count
-	uint32_t desiredSwapchainImageCount = surfaceProperties.minImageCount + 1;
-	if ((surfaceProperties.maxImageCount > 0) && (desiredSwapchainImageCount > surfaceProperties.maxImageCount))
-	{
-		desiredSwapchainImageCount = surfaceProperties.maxImageCount;
-	}
-
-	// find best swapchain image transform
-	VkSurfaceTransformFlagBitsKHR preTransform = surfaceProperties.currentTransform;
-	if (surfaceProperties.supportedTransforms & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR)
-	{
-		preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
-	}
-
-	// find best alpha composite type
-	VkCompositeAlphaFlagBitsKHR compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-	if (surfaceProperties.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR)
-	{
-		compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-	}
-
-	// find best image sharing mode
-	VkSharingMode imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-	if (static_cast<uint32_t>(queues.uniqueIndices.size()) > 1)
-	{
-		imageSharingMode = VK_SHARING_MODE_CONCURRENT;
-	}
-	vector<uint32_t> queueFamilyIndices(queues.uniqueIndices.begin(), queues.uniqueIndices.end());
-
-	VkSwapchainKHR oldSwapchain = swapchain.swapchain;
-
-	// create swapchain
-	VkSwapchainCreateInfoKHR info
-	{
-		.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
-		.surface = surface,
-		.minImageCount = desiredSwapchainImageCount,
-		.imageFormat = surfaceFormat.format,
-		.imageColorSpace = surfaceFormat.colorSpace,
-		.imageExtent = swapchainExtent,
-		.imageArrayLayers = 1,
-		.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
-		.imageSharingMode = imageSharingMode,
-		.queueFamilyIndexCount = static_cast<uint32_t>(queues.uniqueIndices.size()),
-		.pQueueFamilyIndices = queueFamilyIndices.data(),
-		.preTransform = preTransform,
-		.compositeAlpha = compositeAlpha,
-		.presentMode = presentMode,
-		.clipped = true,
-		.oldSwapchain = oldSwapchain
-	};
-
-	VK_CHECK(vkCreateSwapchainKHR(device, &info, nullptr, &swapchain.swapchain));
-
-	if (oldSwapchain != VK_NULL_HANDLE)
-	{
-		for (VkImageView imageView : swapchain.imageViews)
-		{
-			vkDestroyImageView(device, imageView, nullptr);
-		}
-
-		for (auto& perFrame : perFrame)
-		{
-			destroyPerFrame(perFrame);
-		}
-
-		swapchain.imageViews.clear();
-		vkDestroySwapchainKHR(device, oldSwapchain, nullptr);
-	}
-
-	swapchain.dimensions = { swapchainExtent.width, swapchainExtent.height, surfaceFormat.format };
-
-	// retrieve images from swapchain
-	auto swapchainImages = VK_ENUMERATE<VkImage>(vkGetSwapchainImagesKHR, device, swapchain.swapchain);
-	perFrame.clear();
-	perFrame.resize(static_cast<uint32_t>(swapchainImages.size()));
-	for (uint32_t i = 0; i < static_cast<uint32_t>(swapchainImages.size()); i++)
-	{
-		// create image views
-		VkImageViewCreateInfo viewInfo
-		{
-			.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-			.image = swapchainImages[i],
-			.viewType = VK_IMAGE_VIEW_TYPE_2D,
-			.format = surfaceFormat.format,
-			.subresourceRange =
-			{
-				.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-				.baseMipLevel = 0,
-				.levelCount = 1,
-				.baseArrayLayer = 0,
-				.layerCount = 1
-			}
-		};
-
-		VkImageView imageView;
-		VK_CHECK(vkCreateImageView(device, &viewInfo, nullptr, &imageView));
-		swapchain.imageViews.push_back(imageView);
-
-		// create per frame resources
-		createPerFrame(perFrame[i]);
-		perFrame[i].swapchainImage = swapchainImages[i];
-	}
-}
-
-void Renderer::switchPipeline()
-{
-	vkDeviceWaitIdle(device);
-
-	currPipeline = (currPipeline + 1) % 2;
-}
-
-void Renderer::resizeSwapchain()
-{
-	int width, height;
-	glfwGetFramebufferSize(window, &width, &height);
-	while (width == 0 || height == 0)
-	{
-		glfwGetFramebufferSize(window, &width, &height);
-		glfwWaitEvents();
-	}
-
-	vkDeviceWaitIdle(device);
-
-	createSwapchain();
-
-	for (auto& pipeline : pipelines)
-	{
-		pipeline->handleResize();
-	}
-}
-
-void Renderer::createPerFrame(PerFrame& perFrame)
-{
-	VkFenceCreateInfo fenceInfo
-	{
-		.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
-		.flags = VK_FENCE_CREATE_SIGNALED_BIT
-	};
-	VK_CHECK(vkCreateFence(device, &fenceInfo, nullptr, &perFrame.queueSubmitFence));
-
-	VkCommandPoolCreateInfo commandPoolInfo
-	{
-		.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-		.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
-		.queueFamilyIndex = static_cast<uint32>(queues.graphicsIndex)
-	};
-	VK_CHECK(vkCreateCommandPool(device, &commandPoolInfo, nullptr, &perFrame.commandPool));
-
-	VkCommandBufferAllocateInfo commandBufferInfo
-	{
-		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-		.commandPool = perFrame.commandPool,
-		.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-		.commandBufferCount = 1
-	};
-	VK_CHECK(vkAllocateCommandBuffers(device, &commandBufferInfo, &perFrame.commandBuffer));
-}
-
-void Renderer::destroyPerFrame(PerFrame& perFrame)
-{
-	if (perFrame.queueSubmitFence != VK_NULL_HANDLE)
-	{
-		vkDestroyFence(device, perFrame.queueSubmitFence, nullptr);
-		perFrame.queueSubmitFence = VK_NULL_HANDLE;
-	}
-
-	if (perFrame.commandBuffer != VK_NULL_HANDLE)
-	{
-		vkFreeCommandBuffers(device, perFrame.commandPool, 1, &perFrame.commandBuffer);
-		perFrame.commandBuffer = VK_NULL_HANDLE;
-	}
-
-	if (perFrame.commandPool != VK_NULL_HANDLE)
-	{
-		vkDestroyCommandPool(device, perFrame.commandPool, nullptr);
-		perFrame.commandPool = VK_NULL_HANDLE;
-	}
-
-	if (perFrame.swapchainAcquireSemaphore != VK_NULL_HANDLE)
-	{
-		vkDestroySemaphore(device, perFrame.swapchainAcquireSemaphore, nullptr);
-		perFrame.swapchainAcquireSemaphore = VK_NULL_HANDLE;
-	}
-
-	if (perFrame.swapchainReleaseSemaphore != VK_NULL_HANDLE)
-	{
-		vkDestroySemaphore(device, perFrame.swapchainReleaseSemaphore, nullptr);
-		perFrame.swapchainReleaseSemaphore = VK_NULL_HANDLE;
-	}
-}
-
-/*
-* DRAW CALL RESOURCE CREATION
-* Universal buffers must be created after scene loading
-*/
 
 /*
 * Creates pipeline object
@@ -567,83 +385,84 @@ void Renderer::destroyPerFrame(PerFrame& perFrame)
 */
 void Renderer::createPipeline()
 {
-	createPipelineFeed();
-	pipelines.push_back(new Rasterizer(&device, &gpu, allocator, &swapchain, &pipelineFeed));
-	pipelines.push_back(new RayTracer(&device, &gpu, allocator, &swapchain, &pipelineFeed, &queues));
+	createDeviceResources();
+	pipelines.push_back(new Rasterizer(device, swapchain, &deviceResources));
+	pipelines.push_back(new RayTracer(device, swapchain, &deviceResources));
 
 	currPipeline = 0;
 }
 
-void Renderer::createPipelineFeed()
+void Renderer::switchPipeline()
 {
-	// create instance SSBO
-	VkDeviceSize instancesSize = pipelineFeed.instances.size() * sizeof(Instance);
-	allocator->createDeviceLocalBuffer(
-		pipelineFeed.instances.data(),
-		instancesSize,
+	vkDeviceWaitIdle(device->device);
+
+	currPipeline = (currPipeline + 1) % 2;
+}
+
+void Renderer::createDeviceResources()
+{
+	deviceResources.instanceBuffer = new UnkBuffer
+	(
+		device,
+		deviceResources.instances.size() * sizeof(Instance),
 		VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
 		0,
-		pipelineFeed.instanceSSBO,
-		&pipelineFeed.instanceInfo
+		0,
+		deviceResources.instances.data()
 	);
-
-	// create transform SSBO
-	VkDeviceSize transformsSize = pipelineFeed.transforms.size() * sizeof(MVP);
-	allocator->createDeviceLocalBuffer(
-		pipelineFeed.transforms.data(),
-		transformsSize,
+	
+	deviceResources.transformBuffer = new UnkBuffer
+	(
+		device,
+		deviceResources.transforms.size() * sizeof(MVP),
 		VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
 		0,
-		pipelineFeed.transformStagingBuffer,
-		pipelineFeed.transformSSBO,
-		&pipelineFeed.transformInfo
+		0,
+		deviceResources.transforms.data(),
+		true
 	);
 
-	// create light SSBO
-	VkDeviceSize lightsSize = pipelineFeed.lights.size() * sizeof(Light);
-	allocator->createDeviceLocalBuffer(
-		pipelineFeed.lights.data(),
-		lightsSize,
+	deviceResources.lightBuffer = new UnkBuffer
+	(
+		device,
+		deviceResources.lights.size() * sizeof(Light),
 		VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
 		0,
-		pipelineFeed.lightStagingBuffer,
-		pipelineFeed.lightSSBO,
-		&pipelineFeed.lightInfo
+		0,
+		deviceResources.lights.data()
 	);
 
-	// create camera buffer
-	VkDeviceSize cameraSize = sizeof(CameraGPU);
-	allocator->createBuffer
+	deviceResources.cameraBuffer = new UnkBuffer
 	(
-		cameraSize,
+		device,
+		sizeof(CameraGPU),
 		VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
 		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-		VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
-		VMA_MEMORY_USAGE_AUTO,
-		pipelineFeed.cameraBuffer,
-		&pipelineFeed.cameraInfo
+		VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT
 	);
 
 	// create indirect command SSBO
-	for (int i = 0; i < pipelineFeed.meshes.size(); i++)
+	vector<VkDrawIndexedIndirectCommand> drawCommands;
+	for (int i = 0; i < deviceResources.meshes.size(); i++)
 	{
-		pipelineFeed.drawCommands.push_back(pipelineFeed.meshes[i].getDrawCommand());
+		drawCommands.push_back(deviceResources.meshes[i].getDrawCommand());
 	}
-	VkDeviceSize drawCommandBufferSize = pipelineFeed.drawCommands.size() * sizeof(VkDrawIndexedIndirectCommand);
+	VkDeviceSize drawCommandBufferSize = drawCommands.size() * sizeof(VkDrawIndexedIndirectCommand);
 	VmaAllocationInfo drawCommandInfo;
 
-	allocator->createDeviceLocalBuffer(
-		pipelineFeed.drawCommands.data(),
-		drawCommandBufferSize,
+	deviceResources.drawCommandBuffer = new UnkBuffer
+	(
+		device,
+		drawCommands.size() * sizeof(VkDrawIndexedIndirectCommand),
 		VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
 		0,
-		pipelineFeed.drawCommandBuffer,
-		&drawCommandInfo
+		0,
+		drawCommands.data()
 	);
 
-	// texture sampler
+	// create and set texture sampler
 	VkPhysicalDeviceProperties properties{};
-	vkGetPhysicalDeviceProperties(gpu, &properties);
+	vkGetPhysicalDeviceProperties(device->gpu, &properties);
 	VkSamplerCreateInfo samplerInfo
 	{
 		.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
@@ -663,66 +482,52 @@ void Renderer::createPipelineFeed()
 		.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK,
 		.unnormalizedCoordinates = VK_FALSE
 	};
-	VK_CHECK(vkCreateSampler(device, &samplerInfo, nullptr, &pipelineFeed.textureImageSampler));
+	vkCreateSampler(device->device, &samplerInfo, nullptr, &deviceResources.sampler);
+
+	for (auto& textureImage : deviceResources.textureImages)
+	{
+		textureImage->sampler = &deviceResources.sampler;
+	}
 }
 
-void Renderer::createVertexBuffer(vector<Vertex>& vertices, vector<uint32_t>& indices, VkBuffer& vertexBuffer, VkBuffer& indexBuffer)
+void Renderer::createVertexBuffers(vector<Vertex>& vertices, vector<uint32_t>& indices)
 {
-	pipelineFeed.vertexBufferSize = sizeof(vertices[0]) * vertices.size();
-	allocator->createDeviceLocalBuffer(
-		(void*)vertices.data(),
-		pipelineFeed.vertexBufferSize,
+	deviceResources.vertexBuffer = new UnkBuffer
+	(
+		device,
+		vertices.size() * sizeof(Vertex),
 		VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
 		0,
-		vertexBuffer,
-		nullptr);
+		0,
+		vertices.data()
+	);
 
-	pipelineFeed.indexBufferSize = sizeof(indices[0]) * indices.size();
-	allocator->createDeviceLocalBuffer(
-		(void*)indices.data(),
-		pipelineFeed.indexBufferSize,
+	deviceResources.indexBuffer = new UnkBuffer
+	(
+		device,
+		indices.size() * sizeof(uint32_t),
 		VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
 		0,
-		indexBuffer,
-		nullptr);
+		0,
+		indices.data()
+	);
 }
 
-void Renderer::createTexture(void* data, uint32_t imageSize, uint32_t texWidth, uint32_t texHeight)
+void Renderer::createTexture(void* data, uint32_t width, uint32_t height)
 {
 	// create texture image
-	VkImage textureImage;
-	allocator->createTextureImage(
-		data,
-		imageSize,
+	UnkImage* textureImage = new UnkImage
+	(
+		device,
+		height,
+		width,
 		VK_FORMAT_R8G8B8A8_SRGB,
 		VK_IMAGE_TILING_OPTIMAL,
 		VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-		VMA_MEMORY_USAGE_GPU_ONLY,
-		texWidth,
-		texHeight,
-		textureImage,
-		nullptr);
-	pipelineFeed.textureImages.push_back(textureImage);
-
-	// create image views and samplers
-	VkImageView textureImageView;
-	VkImageViewCreateInfo viewInfo
-	{
-		.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-		.image = textureImage,
-		.viewType = VK_IMAGE_VIEW_TYPE_2D,
-		.format = VK_FORMAT_R8G8B8A8_SRGB,
-		.subresourceRange =
-		{
-			.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-			.baseMipLevel = 0,
-			.levelCount = 1,
-			.baseArrayLayer = 0,
-			.layerCount = 1
-		}
-	};
-	VK_CHECK(vkCreateImageView(device, &viewInfo, nullptr, &textureImageView));
-	pipelineFeed.textureImageViews.push_back(textureImageView);
+		true,
+		data
+	);
+	deviceResources.textureImages.push_back(textureImage);
 }
 
 void Renderer::updateInstances(Camera camera, float deltaTime)
@@ -733,18 +538,18 @@ void Renderer::updateInstances(Camera camera, float deltaTime)
 	CameraGPU camGPU;
 
 	camGPU.viewInv = camera.transform.getWorldMatrix();
-	mat4 proj = perspective(radians(45.0f), swapchain.dimensions.width / (float)swapchain.dimensions.height, 0.1f, 10000.0f);
+	mat4 proj = perspective(radians(45.0f), swapchain->extent.width / (float)swapchain->extent.height, 0.1f, 10000.0f);
 	proj[1][1] *= -1;
 	camGPU.projInv = inverse(proj);
 
-	VkDeviceSize size = pipelineFeed.transforms.size() * sizeof(MVP);
-	uint8_t* base = static_cast<uint8_t*>(pipelineFeed.transformInfo.pMappedData);
+	VkDeviceSize size = deviceResources.transforms.size() * sizeof(MVP);
+	uint8_t* base = static_cast<uint8_t*>(deviceResources.transformBuffer->stagingBase.pMappedData);
 
-	for (int i = 0; i < pipelineFeed.transforms.size(); i++)
+	for (int i = 0; i < deviceResources.transforms.size(); i++)
 	{
 		MVP mvp
 		{
-			.model = pipelineFeed.transforms[i].model,
+			.model = deviceResources.transforms[i].model,
 			.view = camera.getViewMatrix(),
 			.proj = proj
 		};
@@ -752,94 +557,50 @@ void Renderer::updateInstances(Camera camera, float deltaTime)
 		memcpy(base + i * sizeof(MVP), &mvp, sizeof(MVP));
 	}
 
-	allocator->copyBuffer(size, pipelineFeed.transformStagingBuffer, pipelineFeed.transformSSBO);
+	deviceResources.transformBuffer->stage();
 
-	memcpy(pipelineFeed.cameraInfo.pMappedData, &camGPU, sizeof(CameraGPU));
+	memcpy(deviceResources.cameraBuffer->base.pMappedData, &camGPU, sizeof(CameraGPU));
 }
 
 /*
 * RENDERING
 */
 
-VkResult Renderer::acquireImage(uint32_t* imageIndex)
-{
-	VkSemaphore imageAcquiredSemaphore;
-	VkSemaphoreCreateInfo info =
-	{
-		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO
-	};
-	VK_CHECK(vkCreateSemaphore(device, &info, nullptr, &imageAcquiredSemaphore));
-
-	VkResult res = vkAcquireNextImageKHR(device, swapchain.swapchain, UINT64_MAX, imageAcquiredSemaphore, VK_NULL_HANDLE, imageIndex);
-	if (res != VK_SUCCESS)
-	{
-		vkDestroySemaphore(device, imageAcquiredSemaphore, nullptr);
-		return res;
-	}
-
-	if (perFrame[*imageIndex].queueSubmitFence != VK_NULL_HANDLE)
-	{
-		vkWaitForFences(device, 1, &perFrame[*imageIndex].queueSubmitFence, VK_TRUE, UINT64_MAX);
-		vkResetFences(device, 1, &perFrame[*imageIndex].queueSubmitFence);
-	}
-
-	if (perFrame[*imageIndex].commandPool != VK_NULL_HANDLE)
-	{
-		vkResetCommandPool(device, perFrame[*imageIndex].commandPool, 0);
-	}
-
-	if (perFrame[*imageIndex].swapchainAcquireSemaphore != VK_NULL_HANDLE)
-	{
-		vkDestroySemaphore(device, perFrame[*imageIndex].swapchainAcquireSemaphore, nullptr);
-	}
-
-	perFrame[*imageIndex].swapchainAcquireSemaphore = imageAcquiredSemaphore;
-
-	return VK_SUCCESS;
-}
-
-VkResult Renderer::presentImage(uint32_t imageIndex)
-{
-	VkPresentInfoKHR present
-	{
-		.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
-		.waitSemaphoreCount = 1,
-		.pWaitSemaphores = &perFrame[imageIndex].swapchainReleaseSemaphore,
-		.swapchainCount = 1,
-		.pSwapchains = &swapchain.swapchain,
-		.pImageIndices = &imageIndex
-	};
-
-	return vkQueuePresentKHR(queues.graphicsQueue, &present);
-}
-
 void Renderer::render(Camera camera, float deltaTime)
 {
 	uint32_t index;
 
-	auto res = acquireImage(&index);
+	auto res = swapchain->acquireImage(&index);
 
 	if (res == VK_SUBOPTIMAL_KHR || res == VK_ERROR_OUT_OF_DATE_KHR)
 	{
-		resizeSwapchain();
-		res = acquireImage(&index);
+		swapchain->resize();
+		pipelines[currPipeline]->handleResize();
+		res = swapchain->acquireImage(&index);
 	}
 
 	if (res != VK_SUCCESS)
 	{
-		vkQueueWaitIdle(queues.graphicsQueue);
+		vkQueueWaitIdle(device->getQueue(device->queues.graphics));
 		return;
 	}
 
 	updateInstances(camera, deltaTime);
 
-	pipelines[currPipeline]->draw(index, perFrame, &queues.graphicsQueue);
+	pipelines[currPipeline]->draw(index);
 	
-	res = presentImage(index);
+	res = swapchain->presentImage(&index);
 
 	if (res == VK_SUBOPTIMAL_KHR || res == VK_ERROR_OUT_OF_DATE_KHR)
 	{
-		resizeSwapchain();
+		swapchain->resize();
+		
+		for (auto& pipeline : pipelines)
+		{
+			pipeline->handleResize();
+		}
+
+		res = swapchain->acquireImage(&index);
 	}
 	else if (res != VK_SUCCESS)
 	{
@@ -847,53 +608,24 @@ void Renderer::render(Camera camera, float deltaTime)
 	}
 }
 
-Renderer::Renderer(GLFWwindow* window, uint32_t width, uint32_t height)
-{
-	this->window = window;
-	swapchain.dimensions.width = width;
-	swapchain.dimensions.height = height;
-	
-	createInstance();
-	
-	VK_CHECK(glfwCreateWindowSurface(instance, this->window, nullptr, &surface));
-	
-	createDevice();
-
-	allocator = new Allocator(gpu, device, instance, queues);
-
-	createSwapchain();
-}
-
 Renderer::~Renderer()
 {
-	vkDeviceWaitIdle(device);
-
-	for (auto& perFrame : perFrame)
-	{
-		destroyPerFrame(perFrame);
-	}
-	perFrame.clear();
-
-	swapchain.cleanup(&device);
-
-	pipelineFeed.cleanup(&device);
+	vkDeviceWaitIdle(device->device);
 
 	for (auto& pipeline : pipelines)
 	{
 		delete pipeline;
 	}
 
-	delete allocator;
-	
-	if (device != VK_NULL_HANDLE)
-	{
-		vkDestroyDevice(device, nullptr);
-	}
-
 	if (surface != VK_NULL_HANDLE)
 	{
 		vkDestroySurfaceKHR(instance, surface, nullptr);
 	}
+
+	deviceResources.destroy(device);
+
+	delete swapchain;
+	delete device;
 
 	if (debugCallback != VK_NULL_HANDLE)
 	{

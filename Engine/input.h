@@ -17,6 +17,8 @@ enum class Key
 class Input
 {
 public:
+	Input();
+
 	Input(GLFWwindow* window);
 
 	~Input();

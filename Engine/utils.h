@@ -8,17 +8,7 @@ using namespace std;
 
 #define LOG(...) cout << __VA_ARGS__ << endl;
 
-#define VK_CHECK(x)                                                                \
-    do                                                                             \
-    {                                                                              \
-        VkResult err = x;                                                          \
-        if (err != VK_SUCCESS)                                                     \
-        {                                                                          \
-            std::cerr << "Vulkan error (" << err << ") at " << __FILE__            \
-                      << ":" << __LINE__ << " -> " << #x << std::endl;             \
-            std::abort();                                                          \
-        }                                                                          \
-    } while (0)
+#define VK_CHECK(x) do { VkResult _r = (x); if (_r) { fprintf(stderr, "%s:%d VkResult=%d\n", __FILE__, __LINE__, _r); throw std::runtime_error("VkResult"); } } while(0)
 
 /*
 * Finds property count and populates corresponding data vector

@@ -1,4 +1,6 @@
 #define GLM_ENABLE_EXPERIMENTAL
+#define STB_IMAGE_IMPLEMENTATION
+
 #include "scene.h"
 
 #include <GLFW/glfw3.h>
@@ -28,11 +30,6 @@ SceneManager::SceneManager(Renderer* renderer)
 	this->renderer = renderer;
 }
 
-SceneManager::~SceneManager()
-{
-
-}
-
 static mat4 convertAIMatrix(const aiMatrix4x4& m)
 {
 	mat4 mat = mat4(
@@ -58,22 +55,21 @@ void SceneManager::loadScene(const char* path)
 
 	if (!scene) throw runtime_error("failed to load scene");
 
-	// setup vertices and indices SSBOs
-	vector<Vertex> verticesSSBO;
-	vector<uint32_t> indicesSSBO;
-
 	// create empty texture
 	const uint32_t pixel = 0xFFFFFFFFu;
-	renderer->createTexture((void*)&pixel, 1 * 1 * 4, 1, 1);
+	renderer->createTexture((void*)&pixel, 1, 1);
 
 	// load mesh vertex and index buffers
+	vector<Vertex> vertices;
+	vector<uint32_t> indices;
+
 	for (unsigned int i = 0; i < scene->mNumMeshes; i++)
 	{
 		const aiMesh* currMesh = scene->mMeshes[i];
 
 		Mesh mesh;
 
-		mesh.vertexOffset = static_cast<uint32_t>(verticesSSBO.size()); // first vertex corrseponding to this mesh
+		mesh.vertexOffset = static_cast<uint32_t>(vertices.size()); // first vertex corrseponding to this mesh
 		mesh.vertexCount = static_cast<uint32_t>(currMesh->mNumVertices);
 
 		// find vertices
@@ -84,11 +80,11 @@ void SceneManager::loadScene(const char* path)
 			vertex.normal = currMesh->HasNormals() ? vec3(currMesh->mNormals[j].x, currMesh->mNormals[j].y, currMesh->mNormals[j].z) : vec3(0.0f);
 			vertex.texCoord = currMesh->HasTextureCoords(0) ? vec2(currMesh->mTextureCoords[0][j].x, currMesh->mTextureCoords[0][j].y) : vec2(0.0f);
 
-			verticesSSBO.push_back(vertex);
+			vertices.push_back(vertex);
 		}
 
 		// find indices
-		mesh.firstIndex = static_cast<uint32_t>(indicesSSBO.size()); // set first index of the mesh to the size of the index buffer
+		mesh.firstIndex = static_cast<uint32_t>(indices.size()); // set first index of the mesh to the size of the index buffer
 
 		uint32_t indexCount = 0;
 		for (unsigned int j = 0; j < currMesh->mNumFaces; j++)
@@ -97,16 +93,19 @@ void SceneManager::loadScene(const char* path)
 
 			for (unsigned int k = 0; k < face->mNumIndices; k++)
 			{
-				indicesSSBO.push_back(face->mIndices[k]);
+				indices.push_back(face->mIndices[k]);
 				indexCount++;
 			}
 		}
 		
 		mesh.indexCount = indexCount;
 
-		renderer->pipelineFeed.meshes.push_back(mesh);
+		renderer->deviceResources.meshes.push_back(mesh);
 	}
-	renderer->createVertexBuffer(verticesSSBO, indicesSSBO, renderer->pipelineFeed.vertexSSBO, renderer->pipelineFeed.indexSSBO);
+
+	// create vertex buffer
+	renderer->createVertexBuffers(vertices, indices);
+
 
 	// load instance data
 	visit(scene->mRootNode, mat4(1.0f), scene);
@@ -132,7 +131,7 @@ void SceneManager::loadScene(const char* path)
 			.color = vec3(L->mColorDiffuse.r, L->mColorDiffuse.g, L->mColorDiffuse.b) / 1000.0f,
 		};
 
-		renderer->pipelineFeed.lights.push_back(light);
+		renderer->deviceResources.lights.push_back(light);
 	}
 }
 
@@ -148,19 +147,15 @@ void SceneManager::visit(const aiNode* node, const mat4& parentTransform, const 
 		// determine which of the scene's meshes this mesh refers to
 		unsigned meshIndex = node->mMeshes[i];
 		const aiMesh* currMesh = scene->mMeshes[meshIndex];
-		Mesh* mesh = &renderer->pipelineFeed.meshes[meshIndex];
+		Mesh* mesh = &renderer->deviceResources.meshes[meshIndex];
 
 		// record current index of transform buffers and create transform buffer
-		uint32_t transformIndex = static_cast<uint32_t>(renderer->pipelineFeed.transforms.size());
-
-		VkBuffer transformBuffer;
-		VmaAllocationInfo transformInfo;
-		VkDeviceSize size = sizeof(mat4);
+		uint32_t transformIndex = static_cast<uint32_t>(renderer->deviceResources.transforms.size());
 
 		MVP mvp;
 		mvp.model = world;
 
-		renderer->pipelineFeed.transforms.push_back(mvp);
+		renderer->deviceResources.transforms.push_back(mvp);
 		
 		uint32_t textureIndex = getTextureIndexForMesh(scene, currMesh);
 
@@ -175,9 +170,9 @@ void SceneManager::visit(const aiNode* node, const mat4& parentTransform, const 
 		// create instance entry for mesh
 		if (mesh->firstInstance == -1)
 		{
-			mesh->firstInstance = static_cast<uint32_t>(renderer->pipelineFeed.instances.size());
+			mesh->firstInstance = static_cast<uint32_t>(renderer->deviceResources.instances.size());
 		}
-		renderer->pipelineFeed.instances.insert(renderer->pipelineFeed.instances.begin() + mesh->firstInstance + mesh->instanceCount, instance);
+		renderer->deviceResources.instances.insert(renderer->deviceResources.instances.begin() + mesh->firstInstance + mesh->instanceCount, instance);
 
 		mesh->instanceCount += 1; // increment mesh's count as we have found the mesh
 	}
@@ -206,7 +201,7 @@ uint32_t SceneManager::getTextureIndexForMesh(const aiScene* scene, const aiMesh
 		}
 		else
 		{
-			index = static_cast<uint32_t>(renderer->pipelineFeed.textureImages.size());
+			index = static_cast<uint32_t>(renderer->deviceResources.textureImages.size());
 			readTexture(path.C_Str());
 			textureMap[key] = index;
 		}
@@ -220,11 +215,15 @@ void SceneManager::readTexture(const char* path)
 	// read image data
 	int texWidth, texHeight, texChannels;
 	stbi_uc* pixels = stbi_load(path, &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
-	VkDeviceSize imageSize = texWidth * texHeight * 4;
 
 	if (!pixels) throw runtime_error("failed to load mesh texture");
 
-	renderer->createTexture(pixels, imageSize, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
+	renderer->createTexture(pixels, static_cast<uint32_t>(texHeight), static_cast<uint32_t>(texWidth));
 
 	stbi_image_free(pixels);
+}
+
+SceneManager::~SceneManager()
+{
+
 }

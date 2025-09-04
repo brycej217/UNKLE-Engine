@@ -19,8 +19,6 @@ public:
 	unordered_map<string, uint32_t> textureMap;
 	unordered_map<string, mat4> nodeWorldMap;
 
-	SceneManager() = default;
-
 	SceneManager(Renderer* renderer);
 
 	~SceneManager();
