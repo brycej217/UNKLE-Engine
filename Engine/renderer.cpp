@@ -301,7 +301,6 @@ void Renderer::createDevice()
 		VK_KHR_PIPELINE_LIBRARY_EXTENSION_NAME,
 		VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
 		VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME,
-		VK_NV_RAY_TRACING_VALIDATION_EXTENSION_NAME
 	};
 
 	VkPhysicalDevice physicalDevice = selectPhysicalDevice(enabledExtensions);
@@ -616,6 +615,8 @@ Renderer::~Renderer()
 	{
 		delete pipeline;
 	}
+	
+	delete swapchain;
 
 	if (surface != VK_NULL_HANDLE)
 	{
@@ -624,7 +625,6 @@ Renderer::~Renderer()
 
 	deviceResources.destroy(device);
 
-	delete swapchain;
 	delete device;
 
 	if (debugCallback != VK_NULL_HANDLE)

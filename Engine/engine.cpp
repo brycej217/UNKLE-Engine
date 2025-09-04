@@ -53,6 +53,8 @@ void Engine::run()
 
 		renderer->render(camera, deltaTime);
 	}
+
+
 }
 
 Engine::Engine()
@@ -78,6 +80,10 @@ Engine::Engine()
 
 Engine::~Engine()
 {
+	delete input;
+	delete sceneManager;
+	delete renderer;
+
 	glfwDestroyWindow(window);
 	glfwTerminate();
 }
