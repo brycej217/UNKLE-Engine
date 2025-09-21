@@ -5,10 +5,11 @@
 * Tested on: Windows 11, Intel(R) CORE(TM) Ultra 9 275HX @ 2.70GHz 32.0GB, NVIDIA GeFORCE RTX 5080 Laptop GPU 16384MB
 
 # UNKLE Engine
-UNKLE (UNtitled VuLKan Engine) Engine is a dual-pipeline real-time Vulkan rendering engine supporting both a ray-tracing pipeline and a rasterization-based pipeline. The two pipelines can be toggled between in real time without any asset reloading overhead.  
-Rasterization Pipeline:  
+UNKLE (UNtitled VuLKan Engine) Engine is a dual-pipeline real-time Vulkan rendering engine supporting both a ray-tracing pipeline and a rasterization-based pipeline. The two pipelines can be toggled between in real time without any asset reloading overhead.    
+
+**Rasterization Pipeline**:  
 ![](images/rasterizer.png)  
-Ray-Tracing Pipeline:  
+**Ray-Tracing Pipeline**:  
 ![](images/raytracer.png)  
 Below are the techincal details about the engine and each pipeline:
 
