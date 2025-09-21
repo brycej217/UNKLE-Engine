@@ -48,11 +48,29 @@ struct Mesh
 	}
 };
 
-struct Light
+struct PushConstants
 {
-	vec3 position;
-	vec3 direction;
-	vec3 color;
+	uint32_t pointLightCount;
+	uint32_t dirLightCount;
+	float _pad0[2];
+};
+
+struct DirectionalLight
+{
+	vec3 direction; float _pad0;
+	vec3 color; float _pad1;
+};
+
+struct PointLight
+{
+	vec3 position; float _pad0;
+	vec3 direction; float _pad1;
+	vec3 color; float _pad2;
+
+	float constant;
+	float linear;
+	float quadratic;
+	float _pad3;
 };
 
 struct MVP
@@ -88,8 +106,10 @@ struct DeviceResources
 	vector<MVP> transforms;
 	UnkBuffer* transformBuffer;
 
-	vector<Light> lights;
-	UnkBuffer* lightBuffer;
+	vector<PointLight> pointLights;
+	vector<DirectionalLight> dirLights;
+	UnkBuffer* pointLightBuffer;
+	UnkBuffer* dirLightBuffer;
 
 	UnkBuffer* cameraBuffer;
 
@@ -104,7 +124,8 @@ struct DeviceResources
 		delete indexBuffer;
 		delete instanceBuffer;
 		delete transformBuffer;
-		delete lightBuffer;
+		delete pointLightBuffer;
+		delete dirLightBuffer;
 		delete cameraBuffer;
 		delete drawCommandBuffer;
 

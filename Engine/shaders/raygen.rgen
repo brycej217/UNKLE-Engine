@@ -8,9 +8,9 @@ struct Transform
     vec4 rotation;
 };
 
-layout(set = 0, binding = 3) uniform accelerationStructureEXT topLevelAS;
-layout(set = 0, binding = 4, rgba8) uniform image2D image;
-layout(set = 0, binding = 5) uniform Camera 
+layout(set = 0, binding = 4) uniform accelerationStructureEXT topLevelAS;
+layout(set = 0, binding = 5, rgba8) uniform image2D image;
+layout(set = 0, binding = 6) uniform Camera 
 {
     mat4 viewInv;
     mat4 projInv;

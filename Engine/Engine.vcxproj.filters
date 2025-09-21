@@ -211,5 +211,6 @@
     <None Include="shaders\raygen.rgen">
       <Filter>shaders\raytracer</Filter>
     </None>
+    <None Include="README.md" />
   </ItemGroup>
 </Project>

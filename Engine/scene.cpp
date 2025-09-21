@@ -121,17 +121,40 @@ void SceneManager::loadScene(const char* path)
 			world = nodeWorldMap[L->mName.C_Str()];
 		}
 
-		vec3 localPosition = vec3(L->mPosition.x, L->mPosition.y, L->mPosition.z);
-		vec3 localDirection = vec3(L->mDirection.x, L->mDirection.y, L->mDirection.z);
-
-		Light light
+		if (L->mType == aiLightSource_POINT)
 		{
-			.position = vec3(world * vec4(localPosition, 1.0f)),
-			.direction = vec3(world * vec4(localDirection, 1.0f)),
-			.color = vec3(L->mColorDiffuse.r, L->mColorDiffuse.g, L->mColorDiffuse.b) / 1000.0f,
-		};
+			vec3 localPosition = vec3(L->mPosition.x, L->mPosition.y, L->mPosition.z);
+			vec3 localDirection = vec3(L->mDirection.x, L->mDirection.y, L->mDirection.z);
 
-		renderer->deviceResources.lights.push_back(light);
+			float diffuseR = std::clamp(L->mColorDiffuse.r, 0.0f, 1.0f);
+			float diffuseG = std::clamp(L->mColorDiffuse.g, 0.0f, 1.0f);
+			float diffuseB = std::clamp(L->mColorDiffuse.b, 0.0f, 1.0f);
+
+			PointLight light
+			{
+				.position = vec3(world * vec4(localPosition, 1.0f)),
+				.direction = vec3(world * vec4(localDirection, 1.0f)),
+				.color = vec3(diffuseR, diffuseG, diffuseG),
+				.constant = std::max(L->mAttenuationConstant, 1.0f),
+				.linear = std::max(L->mAttenuationLinear, 0.09f),
+				.quadratic = std::max(L->mAttenuationQuadratic, 0.032f)
+			};
+			renderer->deviceResources.pointLights.push_back(light);
+		}
+		else if (L->mType == aiLightSource_DIRECTIONAL)
+		{
+			vec3 localDirection = vec3(L->mDirection.x, L->mDirection.y, L->mDirection.z);
+			float diffuseR = std::clamp(L->mColorDiffuse.r, 0.0f, 1.0f);
+			float diffuseG = std::clamp(L->mColorDiffuse.g, 0.0f, 1.0f);
+			float diffuseB = std::clamp(L->mColorDiffuse.b, 0.0f, 1.0f);
+
+			DirectionalLight light
+			{
+				.direction = vec3(world * vec4(localDirection, 0.0f)),
+				.color = vec3(diffuseR, diffuseG, diffuseB)
+			};
+			renderer->deviceResources.dirLights.push_back(light);
+		}
 	}
 }
 

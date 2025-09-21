@@ -184,6 +184,7 @@
     <ClInclude Include="utils.h" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="README.md" />
     <None Include="shaders\compile.bat" />
     <None Include="shaders\hit.rchit" />
     <None Include="shaders\miss.rmiss" />

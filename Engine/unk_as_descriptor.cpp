@@ -30,7 +30,7 @@ VkWriteDescriptorSet UnkAsDescriptor::getDescriptorWrite()
 		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
 		.pNext = &info,
 		.dstSet = *descriptorSet,
-		.dstBinding = 3,
+		.dstBinding = binding,
 		.descriptorCount = 1,
 		.descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR
 	};

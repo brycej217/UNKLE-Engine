@@ -86,19 +86,33 @@ void RayTracer::createDescriptorSets()
 	bindings.push_back(transformBufferDescriptor->getLayoutBinding());
 	flags.push_back(transformBufferDescriptor->bindingFlags);
 
-	UnkDescriptor* lightBufferDescriptor = new UnkBufferDescriptor
+	UnkDescriptor* pointLightBufferDescriptor = new UnkBufferDescriptor
 	(
-		resources->lightBuffer,
+		resources->pointLightBuffer,
 		&descriptorSet,
-		LIGHT_BINDING,
+		POINT_LIGHT_BINDING,
 		VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 		1,
 		VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR,
 		0
 	);
-	descriptors.push_back(lightBufferDescriptor);
-	bindings.push_back(lightBufferDescriptor->getLayoutBinding());
-	flags.push_back(lightBufferDescriptor->bindingFlags);
+	descriptors.push_back(pointLightBufferDescriptor);
+	bindings.push_back(pointLightBufferDescriptor->getLayoutBinding());
+	flags.push_back(pointLightBufferDescriptor->bindingFlags);
+
+	UnkDescriptor* dirLightBufferDescriptor = new UnkBufferDescriptor
+	(
+		resources->dirLightBuffer,
+		&descriptorSet,
+		DIR_LIGHT_BINDING,
+		VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		1,
+		VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR,
+		0
+	);
+	descriptors.push_back(dirLightBufferDescriptor);
+	bindings.push_back(dirLightBufferDescriptor->getLayoutBinding());
+	flags.push_back(dirLightBufferDescriptor->bindingFlags);
 
 	UnkDescriptor* asBufferDescriptor = new UnkAsDescriptor
 	(
@@ -257,6 +271,7 @@ void RayTracer::createDescriptorSets()
 	{
 		writes.push_back(descriptors[i]->getDescriptorWrite());
 	}
+
 	vkUpdateDescriptorSets(device->device, writes.size(), writes.data(), 0, nullptr);
 }
 

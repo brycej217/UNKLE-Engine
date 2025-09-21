@@ -15,28 +15,31 @@ layout(location = 0) in vec3 inPos;
 layout(location = 1) in vec3 inNormal;
 layout(location = 2) in vec2 inUV;
 
-layout(location = 0) out vec3 outViewPos;
-layout(location = 1) out vec3 outNormal;
+layout(location = 0) out vec3 outWorldPos;
+layout(location = 1) out vec3 outWorldNormal;
 layout(location = 2) out vec2 outUV;
 layout(location = 3) flat out uint outTexIndex;
 
 void main() {
-uint instRec = gl_InstanceIndex;
-    
-uint transformIndex = instances[instRec].x;
-uint texIndex = instances[instRec].y;
-MVP mvp = transforms[transformIndex];
 
+// get instance data
+uint instRec = gl_InstanceIndex;
+uint transformIndex = instances[instRec].x;
+MVP mvp = transforms[transformIndex];
+uint texIndex = instances[instRec].y;
+outTexIndex = texIndex;
+
+// transform vertex position to world and view space
 vec4 worldPos = mvp.model * vec4(inPos, 1.0);
 vec4 viewPos = mvp.view * worldPos;
+outWorldPos = worldPos.xyz;
 
+// transform normal to world space
 mat3 normalMat = mat3(transpose(inverse(mvp.model)));
-vec3 viewNormal = normalize(normalMat * inNormal);
+vec3 worldNormal = normalize(normalMat * inNormal);
+outWorldNormal = worldNormal;
 
-outViewPos = worldPos.xyz;
-outNormal = viewNormal;
 outUV = inUV;
-outTexIndex = texIndex;
 
 gl_Position = mvp.proj * viewPos;
 }

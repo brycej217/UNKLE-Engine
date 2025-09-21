@@ -22,7 +22,9 @@ void Rasterizer::createDescriptorSets()
 	{
 		INSTANCE_BINDING,
 		TRANSFORM_BINDING,
-		LIGHT_BINDING,
+		POINT_LIGHT_BINDING,
+		DIR_LIGHT_BINDING,
+		CAMERA_BINDING,
 		TEXTURE_BINDING
 	};
 
@@ -60,19 +62,47 @@ void Rasterizer::createDescriptorSets()
 	bindings.push_back(transformBufferDescriptor->getLayoutBinding());
 	flags.push_back(transformBufferDescriptor->bindingFlags);
 
-	UnkDescriptor* lightBufferDescriptor = new UnkBufferDescriptor
+	UnkDescriptor* pointLightBufferDescriptor = new UnkBufferDescriptor
 	(
-		resources->lightBuffer,
+		resources->pointLightBuffer,
 		&descriptorSet,
-		LIGHT_BINDING,
+		POINT_LIGHT_BINDING,
 		VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 		1,
 		VK_SHADER_STAGE_FRAGMENT_BIT,
 		0
 	);
-	descriptors.push_back(lightBufferDescriptor);
-	bindings.push_back(lightBufferDescriptor->getLayoutBinding());
-	flags.push_back(lightBufferDescriptor->bindingFlags);
+	descriptors.push_back(pointLightBufferDescriptor);
+	bindings.push_back(pointLightBufferDescriptor->getLayoutBinding());
+	flags.push_back(pointLightBufferDescriptor->bindingFlags);
+
+	UnkDescriptor* dirLightBufferDescriptor = new UnkBufferDescriptor
+	(
+		resources->dirLightBuffer,
+		&descriptorSet,
+		DIR_LIGHT_BINDING,
+		VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		1,
+		VK_SHADER_STAGE_FRAGMENT_BIT,
+		0
+	);
+	descriptors.push_back(dirLightBufferDescriptor);
+	bindings.push_back(dirLightBufferDescriptor->getLayoutBinding());
+	flags.push_back(dirLightBufferDescriptor->bindingFlags);
+
+	UnkDescriptor* cameraBufferDescriptor = new UnkBufferDescriptor
+	(
+		resources->cameraBuffer,
+		&descriptorSet,
+		CAMERA_BINDING,
+		VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+		1,
+		VK_SHADER_STAGE_FRAGMENT_BIT,
+		0
+	);
+	descriptors.push_back(cameraBufferDescriptor);
+	bindings.push_back(cameraBufferDescriptor->getLayoutBinding());
+	flags.push_back(cameraBufferDescriptor->bindingFlags);
 
 	UnkDescriptor* textureImagesDescriptor = new UnkImageDescriptor
 	(
@@ -255,11 +285,19 @@ void Rasterizer::createPipeline()
 	};
 
 	// define pipeline layout (using descriptor set layout)
+	VkPushConstantRange pushConstant
+	{
+		.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+		.offset = 0,
+		.size = sizeof(PushConstants)
+	};
 	VkPipelineLayoutCreateInfo pipelineLayoutInfo
 	{
 		.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
 		.setLayoutCount = 1,
-		.pSetLayouts = &descriptorSetLayout
+		.pSetLayouts = &descriptorSetLayout,
+		.pushConstantRangeCount = 1,
+		.pPushConstantRanges = &pushConstant
 	};
 	VK_CHECK(vkCreatePipelineLayout(device->device, &pipelineLayoutInfo, nullptr, &pipelineLayout));
 
@@ -486,6 +524,13 @@ void Rasterizer::draw(uint32_t index)
 	vkCmdBindVertexBuffers(commandBuffer->handle, 0, 1, &resources->vertexBuffer->handle, &offset);
 	vkCmdBindIndexBuffer(commandBuffer->handle, resources->indexBuffer->handle, 0, VK_INDEX_TYPE_UINT32);
 	vkCmdBindDescriptorSets(commandBuffer->handle, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSet, 0, nullptr);
+
+	PushConstants constants
+	{
+		.pointLightCount = static_cast<uint32_t>(resources->pointLights.size()),
+		.dirLightCount = static_cast<uint32_t>(resources->dirLights.size())
+	};
+	vkCmdPushConstants(commandBuffer->handle, pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(PushConstants), &constants);
 
 	vkCmdDrawIndexedIndirect
 	(

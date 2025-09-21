@@ -421,15 +421,26 @@ void Renderer::createDeviceResources()
 		true
 	);
 
-	deviceResources.lightBuffer = new UnkBuffer
+	deviceResources.pointLightBuffer = new UnkBuffer
 	(
 		device,
-		deviceResources.lights.size() * sizeof(Light),
+		deviceResources.pointLights.size() * sizeof(PointLight),
 		VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
 		0,
 		0,
-		deviceResources.lights.data()
+		deviceResources.pointLights.data()
 	);
+
+	deviceResources.dirLightBuffer = new UnkBuffer
+	(
+		device,
+		deviceResources.dirLights.size() * sizeof(PointLight),
+		VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+		0,
+		0,
+		deviceResources.dirLights.data()
+	);
+
 
 	deviceResources.cameraBuffer = new UnkBuffer
 	(
